@@ -1,0 +1,699 @@
+---
+title: "RNAseqDemo"
+author: "Matt Cannon"
+date: "`r format(Sys.time(), '%m/%d/%Y')`"
+output:
+    html_document:
+        toc: true
+        toc_float: true
+        toc_depth: 5
+        number_sections: false
+        code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      error = TRUE,
+                      cache = TRUE)
+```
+
+```{r libraries, eval=FALSE}
+library(edgeR)
+library(tidyverse)
+theme_set(theme_bw())
+theme_update(plot.title = element_text(hjust = 0.5))
+library(qvalue)
+```
+
+## Make up directory structure
+```{bash mkdirs, eval=FALSE}
+for directoryName in \
+    misc \
+    slurmOut \
+    input/fastqs \
+    output/figures \
+    output/rdata \
+    output/de \
+    output/gsea
+do
+  if [ ! -d ${directoryName} ]
+  then
+    mkdir -p ${directoryName}
+  fi
+done
+```
+
+# Overview
+
+This is a demo of an RNAseq analysis. We are analyzing data from this paper:
+"Nrf2 contributes to the weight gain of mice during space travel"
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7479603/
+
+The data are available on GEO and SRA:
+https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE152382
+https://www.ncbi.nlm.nih.gov/Traces/study/?acc=PRJNA639142
+
+I downloaded metadata including the SRA run accessions and saved it as a CSV named "misc/MiiiceIiiiinSpaaaaaaaaaaaaace.csv".
+
+We can use this to download the raw fastq data from SRA that we'll use through the rest of this demo. We will also use the metadata during the analysis to define groups.
+
+# Samples
+
+We are going to analyze the RNAseq data from the thymus of four groups of mice.
+
+- Boring wildtype C57BL/6 mice left on earth
+- Terrestrial mutant Nrf2 knockout mice left on earth
+- C57BL/6 astronaut mice launched into orbit for 31 days
+- Mutant mice from outspace with Nrf2 knocked out launched into orbit for 31 days
+
+# Get the data
+
+```{bash eval=TRUE}
+sbatch sbatch/getSRAData.sh
+```
+
+
+## Quality control
+
+### Look at some of the data directly
+
+```{bash eval=TRUE}
+zcat input/fastqs/SRR11686500_1.fastq.gz | head -n 40
+```
+
+
+#### Good fastq
+```
+@DB9GZKS1:667:HL3FCBCXY:1:1101:1432:2037 1:N:0:ACTTGA
+CCTTGATATTTGAAGGGTCTTGGTCGGATGAAAATTTAAGCCTTTACAAGAGCAGCAAACTCTTCAGCTCCGATCTTGCCGTCACCATCGCTGTCTCCGGC
++
+DDDDDIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIHIIIIIIIIIIIIIIIIHIHIHIIIIIIHIIIHIIIIIIIIID
+@DB9GZKS1:667:HL3FCBCXY:1:1101:1368:2106 1:N:0:ACTTGA
+TATGGTTCTTTGTGAGGACGAGTTTGCAGGGCATTCATAAATAAATATAAAAAAGATGATAAGCAGAGCTCTGGGTCCGAAGGCAAGGGTCCATGAATGCT
++
+DBDDDIIIIIIIIIHIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIHIHIIIIIIIIIIIIIIIIIIHIIIIHHHIIIIIIIIIHH
+@DB9GZKS1:667:HL3FCBCXY:1:1101:1309:2119 1:N:0:ACTTGA
+CTCCAGTACACCGTTACACCTCAGCTGGTGGATAACCAGGAAGTTCTCCATAAGACCTGGAGTCTTGGACTCGTTGGGAATCAGACAACGCACAAAGTGAG
++
+DDDDDIIIIIIHHHIIIIIIIIIIIIIIIIIIIGHIIIIIHHHHIHIIIIHHGHHHIHIIIIHIHIIIHHIHIIIIIIHIIHIIIIIIHIIIIGIIIIIHI
+@DB9GZKS1:667:HL3FCBCXY:1:1101:1443:2144 1:N:0:ACTTGA
+CATCTCTTAATGGCCAGCATCCTCTTTGAGCGGCAGTTAGGCTCCACGCACTCCAGCCTCAGCACGATCTTCTAGATCGGAAGAGCACACGTCTGAACTCC
++
+DDDDDIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIGIIIIIIIIIIIIIIIII
+@DB9GZKS1:667:HL3FCBCXY:1:1101:1494:2199 1:N:0:ACTTGA
+CTTCATGCCAGAGATGTCCACTTTGGTGTTTGTGGCGATGCAGAACTTCTGGTGAGCTCTACGCAGAGGGACGCGGTTGATAGCCAGAGGACCGGTGACGA
++
+DDDDDIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIHIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII@
+@DB9GZKS1:667:HL3FCBCXY:1:1101:1376:2233 1:N:0:ACTTGA
+GGCTTTTTCAGCATCTTAACCTTCCTGACGTAGACGTCATGTAGAGGATAGATGGATTGGCAGGCCTTTTCAATGTCCTTGCCAACACTGTCAGGAATCAG
++
+DDDDDIIIHIIIIIIIIIIIIIIHHHIIIIIHIHIHIIIIIIHHHHIHIHIIIIIIIIIIIHIIIIIIIIHHHIIIIIIIIHHIIIIIIIIIIIIHHIHHI
+@DB9GZKS1:667:HL3FCBCXY:1:1101:1688:2069 1:N:0:ACTTGA
+GCAGTTTCAGTGGCCTCACCGACCTTCTCATAGATCTTCTTGGTCTCATTGTAGTCAAGGGAGGAATCATTGCACAGGGCGCAGATGGTGGCCAACTCAAC
++
+DDDDDIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+@DB9GZKS1:667:HL3FCBCXY:1:1101:1580:2081 1:N:0:ACTTGA
+CATTAATCCATCCATCCATTCTTTCATTTATTCATTCATTGATTCGTCCATCCATCCATCCATCCATCCATTCTTTCATTTATTCATTGATTCGTCCATCC
++
+DDDDDIIIHIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIHIIIIIIIHIIHIIIIIIIIIIIHIIIHIIIIIIIIIIIIHIIIIHIIFEHHHGIHHHHIH
+@DB9GZKS1:667:HL3FCBCXY:1:1101:1544:2106 1:N:0:ACTTGA
+CTTGATCTTCATGGTGCTGGGGGCCAGAGCGGTGATCTCCTTCTGCATACGGTCAGCAATACCAGGGTACATGGTGGTACCGCCGGAGAGGACGTTGTTGG
++
+DDDDDIIIIIIIHIIIGIIIIIIIIHHHHIIIIIHIIIIIIHHIIIHHIIIIIHIIIIIIIFHIIIIIIIIIIHIHEHHIIGIIHIHIIIIIIIIHHHHHH
+@DB9GZKS1:667:HL3FCBCXY:1:1101:1530:2164 1:N:0:ACTTGA
+CAGGAACATCGATAAGGGTCCAACTGCTGCCTCTCTCACTTTTGCTCTTGTATGTGGCACTGCTCTCTGTGATGGACGTCTGAGTTCGTACAAACTTTCCT
++
+@0DB0CCGHHHIEEHEHHHICHEHHEHHHEHIIIIIGCFE@GH@CHIICEG<C<CH?<<FE?GHIECHHIIHHEC1</DGGE1CFD1EDCEC?<1CC@1FC
+@DB9GZKS1:667:HL3FCBCXY:1:1101:1519:2184 1:N:0:ACTTGA
+CAAAAAAAGTTTTCATATAACACAGATGGATTTTTTATAACACAAACAAATTTAGTAACAAAGCAGGTGAGCGGTAAGACCAGTTATACTGGAGATCGGAA
++
+DDDDDIIIIGHHIIIIHHIIIIIIIIIIIIIIIIIIIIIIGHHHIIIIIHIHIIIIIIIIIIIGIIIIIHIIIIIIIIIIIHIIIIIIHIIGFHIHIIIII
+```
+
+#### Short trimmed reads
+```
+@A00498:249:H3VJNDRXY:1:2101:1398:1000 1:N:0:NAGAGGCA+ATCATGTT
+GTTTTACAGATGTGCACAAGTCTGACAGGCATCAGTTTGGTCTTCTTGAAAC
++
+FFFFFFFF,:FF:F:FFFFFF:F::FFFFFFFFFFF:FFFFFFFFFFFFFFF
+@A00498:249:H3VJNDRXY:1:2101:2555:1000 1:N:0:NAGAGGCA+ATCATGTT
+GTGCTTGGCCTATTAAGTAGTATTAACTCACACTATCACAAGG
++
+FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+@A00498:249:H3VJNDRXY:1:2101:3441:1000 1:N:0:NAGAGGCA+ATCATGTT
+NAACATACCATCCTCTGTTTCCTGTTCAATTTTCCATGGTCTCTTGGTGTTTTCAAACTGGTCCTTGCTAACAG
++
+#:FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+@A00498:249:H3VJNDRXY:1:2101:3911:1000 1:N:0:NAGAGGCA+ATCATGTT
+NGCACGTCCTGATTTCCCAGCACCACGAGGTGCTCCAGGCTCTCGTGTCTTGTATTTTCCCCGCCCCAGCCTTGGAC
++
+#FF:FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFF:FFFFF
+@A00498:249:H3VJNDRXY:1:2101:4218:1000 1:N:0:NAGAGGCA+ATCATGTT
+NCCTCGCCCTCTCCCTCGCACGCCTTCCGTGTGGTACGGCCCACACCATTAGAGT
++
+#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+@A00498:249:H3VJNDRXY:1:2101:6099:1000 1:N:0:NAGAGGCA+ATCATGTT
+NACTTAGCCTTGGGGATAAAAAAAAAAAAAATAAGATTGAGTCTCCATCCTAAAACAGGTCACGGCTAGTTCAAGAC
++
+#FFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFF,:FFF:FFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFF:FF
+@A00498:249:H3VJNDRXY:1:2101:8142:1000 1:N:0:NAGAGGCA+ATCATGTT
+NAATGGTACTGAACCTACGAGTACACCGACTACGGCGGACTAATCTTCAACTCCTACATAC
++
+#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+@A00498:249:H3VJNDRXY:1:2101:9064:1000 1:N:0:NAGAGGCA+ATCATGTT
+NCAGTGAGCTGAGATGACACCACTGCACTCCAGCCGGGGTGACAGAGTGAGACCC
++
+#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+@A00498:249:H3VJNDRXY:1:2101:9082:1000 1:N:0:NAGAGGCA+ATCATGTT
+NAATAGGACTCTCCTTCTCTGCCATTTGCTTCTTCAGCATAGTTTTTGGTAAACCAAGTAACATCTTCAAGAGTGGTAG
++
+#FFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+@A00498:249:H3VJNDRXY:1:2101:9769:1000 1:N:0:NAGAGGCA+ATCATGTT
+NTATTATTCGGCGCATGAGCTGGAGTCCTAGGCACAGCTCTAAGC
++
+#FF::FFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFFFFF
+```
+
+#### Reads with bad quality on the end of some reads
+```
+@A00498:249:H3VJNDRXY:1:2101:15356:1000 1:N:0:NAGAGGCA+ATCATGTT
+NTCTTGGAGAGGAAGCCGGAAGCTGCCTTCAAGAACACCCCCAGCTCAGCCCCTGTCTCTTATACACATCTCCGAGCCCACGAGACAAGAGGCAATCTCGTATTCCGTAGTATGCGTTTAAAAAGGGGGGGGGGGGGGGGGGGGGGGGGGG
++
+#FFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,FFFFF,FF:FFF,F,,F,,,,F,,,:,F,,:FF:,:,FFFFF:FFFFFFFFFFFFFFFFFFF
+@A00498:249:H3VJNDRXY:1:2101:15519:1000 1:N:0:NAGAGGCA+ATCATGTT
+NGGTGGAAGGTGATTTTATCGGAATGGGAGGTGATTCCTAGGGGGTTGTTTGATCCCGTTTCGTGCAAGAATAGGAGGTGGAGTGCTGCTAGGGCTGCAATAATGAAGGGCAAGATGAAGTGAAAGGTAAAGAATCGTGTGAGGGTGGGAC
++
+#FFFFFF,FFFFFFFF:FFFFFF:FFFFFFF:FFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFF,FFFFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFF,F:FFFFF:FFFF:FFFFF:FFFFF:FFFFFF:FFFFFF:
+@A00498:249:H3VJNDRXY:1:2101:15700:1000 1:N:0:NAGAGGCA+ATCATGTT
+NGATCTTTTCTTCAAGAAGTAGCCCCTTTGCTAACTATAATAAAAATGTCTCCTGAGTCTCCTTATGTAGCTCTGTGTAGAAGAGAATCTAATACTTCCCTGTTGAGCAACCATGCAAGGTGGAACCAGGGAGTCGGTGGGAAGTTAGT
++
+#FF,FFFFFFFFFFFFFFFFFFFF:FF:FF:FFFFFF:F:FFFFFFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFF:FFFFFF
+@A00498:249:H3VJNDRXY:1:2101:15826:1000 1:N:0:NAGAGGCA+ATCATGTT
+NGACACACAGGAGTGGCCAGGATCGTTTTTTAAGGAGGTGCATCTGAAACATGTTATGAAGCCTCCTTATCGAAGCAGCTCGGGAGGCTGGATGAAGACAGTAGTTGGGGCAACAGAGCAAATGGTGCAGACGCTGCCCAGATCCACACGG
++
+#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,
+@A00498:249:H3VJNDRXY:1:2101:16062:1000 1:N:0:NAGAGGCA+GTCATGTT
+NCCCCCTCCATATGGAGTCTCGTTCTGGTCACCCAGGCTGGGGTGCTGTAGCACAATCTCTGCTCACTGCAACCTCCACCTCCTGGGTTCAAGTGATTCTCCTGCCTCAGCCTCCCTAGTAGCTGGGATTACAGGCGCCCGCCACCACGCC
++
+#FFFFFFFFFFFFFFFFFF:FF,FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+@A00498:249:H3VJNDRXY:1:2101:16297:1000 1:N:0:NAGAGGCA+ATCATGTT
+NCTATAAGTCAATGAGAAGAGTTACAACTGGGAGACCCGAAAGAGTATGACCCTCCTGGCTTTAGGACTCAGGACAAAAACCAAACATCCATTTCCTTAATGAGGAGTTCACCTTTCCTCTATCCCCTGTCTCTTATACACATCTCCGAGC
++
+#FFFFF::::FFFFFFFF:FFFFFFFFFFFF:FFFF:FFFFFFF,FFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFF,FFFFFFFFFFFFF:FFFFFFFF::FFFFF,FFFFFFFFFFFFFFFFFFFF::F:FFF,FFFFFF,F,:FFFF,
+@A00498:249:H3VJNDRXY:1:2101:16315:1000 1:N:0:NAGAGGCA+ATCATGTT
+NTACAGTCGCGCGATCTCAGCTCACTGTAACCTGCACCTCCCAGGCTCAAACAATTCTTCTTCCTCAGCCTCCCAAGTAGCTGGAATTATAGGTGCCCACCACCACACCCAACTAATTTTTGGACTTTTAGTAGAGACGGGGGTTTCATC
++
+#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:,FFFFFFFFFFFFFFFFFFFF:FFFFFFFFF:FFFFFFFFF:FFFFFF:FFFFFFFFFFF::F:FFFFFF:F,FF:FFFFFF:,FFFFF,:F:F,F
+@A00498:249:H3VJNDRXY:1:2101:16423:1000 1:N:0:NAGAGGCA+ATCATGTT
+NAGGAGAAGCAGGTGGTTGTGGCTATAAGAGGGTGGCACAAGTTATCCTTGCATAGGAACTGTTCAGTCTTTTGACGGGTGTTGAATATATGAACCTCTACAGGTGATAGAATTGTATGGAACTTAATAGACACATATACACAGGCAAATG
++
+#FFFFFFFF:FFFFFFFFFFFFFF,::FF::FFFFFFFFFF:FFFFFFF,F:F:FFFFFFFFFFFF::FFFF:FFFFFF:F,FF:FFFFFF:FFFFFFFFFFF:FFF:FFFF::FFFFFFFFFF,F,FFFFFFFFFFFFFFFFFFF:FF::
+@A00498:249:H3VJNDRXY:1:2101:16712:1000 1:N:0:NAGAGGCA+ATCATGTT
+NCCCCATCTCATGCCACACGTCTTTCCCCCTCAATGACACCCCATCTCACGCCACGTGTCTTTCCCCCGCACAGACACCCCAACAAAACACAAATAACCATCACCCACCCCAACACACCAAAGGAACACACCAATAAAGACAACAGCATG
++
+#FFFFFFFFFF,FFFFFFFFFFF:F:FFFF,FFFFFF:FFFFFFFFFFFF:FFFF,,,F:,FFF,FFF,FFF,,F:,F:FFF,:,,,,,,F:,F,,,,,,:,,:FFF,:F,F,::,,F,F,F,,,:,:F,:,,,,,,,,:,,,,,,,,,,
+```
+### Look at summary of data quality using fastqc
+
+*fastqc*
+
+Inputs:
+
+-   fastq.gz files
+
+Outputs:
+
+-   A zip file/folder
+    -   Text file summaries
+    -   Images
+    -   Html file
+-   An html file
+    -   Overall summary
+
+Options:
+
+-   -o Output folder
+-   -t # of threads
+-   --extract Extract zip folder
+
+```{bash fastqc, eval=FALSE}
+fastqc \
+  -o output/fastqc \
+  -t 5 \
+  --extract \
+  input/*.fastq.gz
+```
+
+## Align the reads to a reference genome
+
+Pre-built references available on Franklin:
+```
+/reference/
+     blast_database
+     checkm
+     diamond_database
+     escherichia_coli
+     greengenes
+     homo_sapiens
+     macaca_mulatta
+     mus_musculus
+     README.txt
+     silva.119
+     silva.bacteria
+```
+
+#### Human HiSat2 reference:
+
+```
+/reference/homo_sapiens/hg38/ucsc_assembly/illumina_download/Sequence/HiSat2Index/genome
+```
+
+### Build a reference
+
+*hisat2-build*
+
+Inputs:
+
+-   Reference fasta file
+
+Outputs:
+
+-   Several *.ht2 files
+
+Options:
+
+-   -p # of threads
+
+```{bash hisatBuild, eval=FALSE}
+hisat2-build \
+  -p 8 \
+  /folder/path/to/reference/pandaGenome.fa \
+  /folder/path/to/reference/pandaGenome
+```
+
+### Alignment using HiSat2
+
+*hisat2*
+
+Inputs:
+
+-   fastq.gz files
+-   Reference
+
+Outputs:
+
+-   Sam file sorted by position
+
+Options:
+
+-   -x Reference genome
+-   -1 R1.fastq.gz
+-   -2 R2.fastq.gz
+-   -U R1.fastq.gz # Only if single ended reads - instead of -1/-2
+-   -p # of threads
+-   --summary-file location to write a summary of the alignment
+
+-----
+
+*samtools view*
+
+Converts sam output to bam
+
+Inputs:
+
+-   Sam file
+
+Outputs:
+
+-   Bam file
+
+Options:
+
+-   -f filter the reads - 2 filters unmapped reads
+-   -b output bam format
+
+-----
+
+*samtools sort*
+
+Sort the output by position - needed to index and view in IGV
+
+Inputs:
+
+-   Bam file
+
+Outputs:
+
+-   Sorted bam file
+
+-----
+
+*samtools index*
+
+Inputs:
+
+-   Bam file
+
+Outputs:
+
+-   Bam index (bai) file
+
+```{bash hisat, eval=FALSE}
+hisat2 --help
+
+hisat2 \
+  -x /reference/homo_sapiens/hg38/ucsc_assembly/illumina_download/Sequence/HiSat2Index/genome \
+  -1 input/inputFile_R1.fastq.gz \
+  -2 input/inputFile_R2.fastq.gz \
+  -p 8 \
+  --summary-file output/aligned/inputFile_Summary.txt | \
+samtools view \
+  -f 2 \
+  -b \
+  - | \
+samtools sort \
+  - \
+    > output/aligned/inputFile.bam
+
+samtools index \
+  output/aligned/inputFile.bam
+```
+
+### Alternate - align with tophat
+
+*tophat*
+
+Inputs:
+
+-   -p # of threads
+-   -o output folder
+
+Outputs:
+
+-   accepted_hits.bam - Bam file of aligned reads
+-   junctions.bed     - Bed file of intron junctions
+-   insertions.bed    - Bed file of insertions
+-   deletions.bed     - Bed file of deletions
+
+```{bash tophat, eval=FALSE}
+tophat --help
+
+tophat -G /data/Indexes/Annotation/mm9.gtf \
+  -p 8 \
+  -o output/aligned \
+  /reference/homo_sapiens/hg38/ucsc_assembly/illumina_download/Sequence/HiSat2Index/genome \
+  input/inputFile_R1.fastq.gz \
+  input/inputFile_R2.fastq.gz
+```
+
+#### Check the percent of reads aligned to the genome
+
+Ideally > 80%. If way off, look into what the other reads are.
+
+### Look at alignment in IGV for sanity check
+
+`r knitr::include_graphics("IGV.png")`
+
+## Remove PCR duplicates
+
+*samtools collate*
+
+Sort by name
+
+Inputs:
+
+-   Aligned bam file
+
+Outputs:
+
+-   Sam file
+
+Options:
+
+-   -@ # of threads
+-   -O output to stdout
+
+-----
+
+*samtools fixmate*
+
+Fills in mate coordinates and insert size fields
+Input needs to be sorted by read name, not position
+
+Inputs:
+
+-   Sam file
+
+Outputs:
+
+-   Sam file of aligned reads
+
+Options:
+
+-   -@ # of threads
+-   -m add mate score tag
+
+-----
+
+*samtools sort*
+
+Sort by position - needed by samtools markdup
+
+Inputs:
+
+-   Sam file
+
+Outputs:
+
+-   Bam file
+
+Options:
+
+-   -@ # of threads
+-   -O output format
+
+-----
+
+*samtools markdup*
+
+Remove duplicates
+
+Inputs:
+
+-   Bam file
+
+Outputs:
+
+-   Bam file of aligned reads
+
+Options:
+
+-   -@ # of threads
+-   -r remove duplicates
+
+```{bash rmdup, eval=FALSE}
+samtools --help
+samtools fixmate --help
+
+samtools collate \
+  -@ 4
+  -O \
+  output/aligned/inputFile.bam | \
+samtools fixmate \
+  -@ 4 \
+  -m \
+  - \
+  - | \
+samtools sort \
+  -@ 4
+  -O BAM | \
+samtools markdup \
+  -@ 4 \
+  -r \
+  - \
+  output/aligned/rmdup/inputFile.bam
+```
+
+## Count reads per gene
+
+*featureCounts*
+
+Count number of reads per gene
+
+Inputs:
+
+-   Bam files
+-   Gtf file of gene locations
+
+Outputs:
+
+-   Table of reads per gene
+
+Options:
+
+-   -T # of threads
+-   -a Gene annotation
+-   -o output file
+-   -p Paired end libraries
+-   --countReadPairs Count read pairs not reads
+-   -s Stranded libraries or not
+
+```{bash featureCounts, eval=FALSE}
+featureCounts --help
+
+featureCounts \
+  -T 10 \
+  -a /reference/homo_sapiens/hg38/ucsc_assembly/illumina_download/Annotation/Genes/genes.gtf \
+  -o output/geneCounts/combined.txt \
+  -p \
+  --countReadPairs \
+  -s 0 \
+  output/aligned/rmdup/*.bam
+```
+
+## Differential expression analysis
+
+```{r edgeR, eval=FALSE}
+gene_expr <- read_delim("output/geneCounts/combined.txt",
+                        delim = "\t",
+                        col_names = TRUE,
+                        comment = "#")
+
+
+groups <- factor(c(1, 1, 1, 1, 1, 2, 2, 2, 2, 2))
+
+dataDGE <- DGEList(counts = gene_expr, group = groups)
+
+keptDf <- filterByExpr(dataDGE, min.count = 10)
+
+dataDGE <- dataDGE[keptDf, keep.lib.sizes = FALSE]
+
+dim(dataDGE$counts)
+
+dataDGE <- calcNormFactors(dataDGE)
+
+design <- model.matrix(~ groups)
+
+dataDGE <- estimateDisp(dataDGE, design)
+
+tested <- exactTest(dataDGE)
+
+results <- topTags(tested, n = Inf)
+results$table$Gene <- rownames(results$table)
+
+norm_counts <- as.data.frame(cpm(dataDGE)) %>%
+  rownames_to_column(var = "Gene") %>%
+  as_tibble() %>%
+  mutate(mean_group1 = select(., matches("^Group1")) %>%
+           rowMeans(),
+         mean_group2 = select(., matches("^Group2")) %>%
+           rowMeans())
+
+write.table(norm_counts,
+            file = "output/edgeROut/normCounts.txt",
+            quote = FALSE,
+            sep = "\t",
+            row.names = FALSE)
+
+results_df <- results$table %>%
+  left_join(., read_delim("refs/gene_info.txt.gz",
+                          delim = "\t",
+                          escape_double = FALSE,
+                          trim_ws = TRUE) %>%
+              rename(Gene = `Gene stable ID version`) %>%
+              select(-`Transcript stable ID version`,
+                     -`Transcript stable ID`,
+                     -`Transcript type`,
+                     -`Gene type`,
+                     -`Gene stable ID`) %>%
+              unique()) %>%
+  full_join(norm_counts %>%
+              select(Gene, mean_group1, mean_group2))
+
+write.table(results_df,
+            file = "output/edgeROut/edgeROut.txt",
+            quote = FALSE,
+            sep = "\t",
+            row.names = FALSE,
+            col.names = TRUE)
+```
+
+### Plotting DE results
+
+```{r dePlots, eval=FALSE}
+# Histogram of logFC
+ggplot(results$table, aes(x = logFC)) +
+  geom_vline(xintercept = 0, color = "red") +
+  geom_histogram(bins = 100) +
+  ggtitle"Histogram of logFC")
+
+# Histogram of p-values
+ggplot(results$table, aes(x = PValue)) +
+  geom_histogram(bins = 100) +
+  ggtitle("Histogram of p-values")
+
+# Histogram of FDR values
+ggplot(results$table, aes(x = FDR)) +
+  geom_histogram(bins = 100) +
+  ggtitle("Histogram of FDR values")
+
+# Volcano plot
+ggplot(results$table, aes(x = logFC,
+                          y = -log10(PValue),
+                          color = FDR <= 0.1)) +
+  geom_point(alpha = 0.5) +
+  ggtitle("Volcano plot\nFDR <= 0.1 denoted in blue")
+
+# Scatterplot of group mean expression values (log10 transformed)
+ggplot(norm_counts,
+       aes(x = mean_group1,
+           y = mean_group2)) +
+  geom_point(alpha = 0.2) +
+  geom_abline(slope = 1, intercept = 0) +
+  ggtitle("Scatterplot of mean CPM values") +
+  scale_y_log10() +
+  scale_x_log10()
+
+```
+
+## PCA analysis
+
+```{r PCA, eval=FALSE}
+# data frame of normalized count data
+  # for PCA, the genes need to be the columns with the values for each sample as a row
+norm_counts <- read_delim("output/edgeROut/normCounts_fixed.txt",
+                          delim = "\t",
+                          col_names = TRUE)
+
+pca <- column_to_rownames(norm_counts, "Sample") %>%
+  prcomp(.)
+
+meta_data <- read_delim("misc/metadata.txt",
+                        delim = "\t",
+                        col_names = TRUE)
+
+pc_df <- pca$x %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "Sample") %>%
+  tibble() %>%
+  left_join(meta_data) %>%
+  left_join(norm_counts)
+
+explained <- as.list((pca$sdev)^2 / sum(pca$sdev^2))
+names(explained) <- colnames(pca$x)
+plot(as.numeric(explained[1:10]))
+
+ggplot(pc_df, aes(x = PC1,
+                  y = PC2,
+                  color = tissue_type)) +
+  geom_point()
+
+ggplot(pc_df, aes(x = PC1,
+                  y = PC2)) +
+  geom_point(alpha = 0.5, aes(size = PC3,
+                              color = tissue_type)) +
+  ggrepel::geom_text_repel(aes(label = Sample),
+                           size = 2)
+```
+
+
