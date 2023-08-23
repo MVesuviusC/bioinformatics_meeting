@@ -26,11 +26,14 @@ library(qvalue)
 ```
 
 ## Make up directory structure
-```{bash mkdirs, eval=FALSE}
+```{bash mkdirs, eval=TRUE}
 for directoryName in \
     misc \
     slurmOut \
     input/fastqs \
+    output/fastqc \
+    output/multiqc \
+    output/align \
     output/figures \
     output/rdata \
     output/de \
@@ -68,7 +71,7 @@ We are going to analyze the RNAseq data from the thymus of four groups of mice.
 
 # Get the data
 
-```{bash eval=TRUE}
+```{bash getData, eval=TRUE}
 sbatch sbatch/getSRAData.sh
 ```
 
@@ -77,8 +80,8 @@ sbatch sbatch/getSRAData.sh
 
 ### Look at some of the data directly
 
-```{bash eval=TRUE}
-zcat input/fastqs/SRR11686500_1.fastq.gz | head -n 40
+```{bash sneakPeak, eval=TRUE}
+zcat input/fastqs/SRR12005052.fastq.gz | head -n 40
 ```
 
 
@@ -241,9 +244,12 @@ fastqc \
   -o output/fastqc \
   -t 5 \
   --extract \
-  input/*.fastq.gz
+  input/fastqs/*.fastq.gz
 ```
 
+```{bash actualFastqc, eval=TRUE}
+sbatch sbatchCmds/fastqc.sh
+```
 ## Align the reads to a reference genome
 
 Pre-built references available on Franklin:
@@ -262,27 +268,21 @@ Pre-built references available on Franklin:
      silva.bacteria
 ```
 
-#### Human HiSat2 reference:
+#### Mouse HiSat2 reference:
 
 ```
-/reference/homo_sapiens/hg38/ucsc_assembly/illumina_download/Sequence/HiSat2Index/genome
+/reference/mus_musculus/mm10/ucsc_assmebly/illumina_download/Sequence/Hisat2Index/genome
 ```
 
-### Build a reference
+### If you need to build a reference
 
 *hisat2-build*
-
 Inputs:
-
--   Reference fasta file
-
+    -   Reference fasta file
 Outputs:
-
--   Several *.ht2 files
-
+    -   Several *.ht2 files
 Options:
-
--   -p # of threads
+    -   -p # of threads
 
 ```{bash hisatBuild, eval=FALSE}
 hisat2-build \
@@ -294,85 +294,85 @@ hisat2-build \
 ### Alignment using HiSat2
 
 *hisat2*
-
+Aligns fastq reads to the reference genome
 Inputs:
-
--   fastq.gz files
--   Reference
-
+    -   fastq.gz files
+    -   Reference
 Outputs:
-
--   Sam file sorted by position
-
+    -   Sam file sorted by position
 Options:
-
--   -x Reference genome
--   -1 R1.fastq.gz
--   -2 R2.fastq.gz
--   -U R1.fastq.gz # Only if single ended reads - instead of -1/-2
--   -p # of threads
--   --summary-file location to write a summary of the alignment
-
+    -   -x Reference genome
+    -   -1 R1.fastq.gz
+    -   -2 R2.fastq.gz
+    -   -U R1.fastq.gz # Only if single ended reads - instead of -1/-2
+    -   -p # of threads
+    -   -k
+    -   --summary-file location to write a summary of the alignment
 -----
 
-*samtools view*
-
-Converts sam output to bam
-
+*samtools fixmate*
+Marks which reads are PCR duplicates
 Inputs:
-
--   Sam file
-
+    -   Sam file sorted by read name
 Outputs:
-
--   Bam file
-
-Options:
-
--   -f filter the reads - 2 filters unmapped reads
--   -b output bam format
-
+    -   Sam file with additional info
 -----
 
 *samtools sort*
-
 Sort the output by position - needed to index and view in IGV
-
 Inputs:
-
--   Bam file
-
+    -   Bam file
 Outputs:
+    -   Sorted bam file
+Options:
+    -   -@ # of threads
+    -   -m how much memory to use per thread
+-----
 
--   Sorted bam file
+*samtools markdup*
+Removes PCR duplicates
+Inputs:
+    -   Bam file sorted by coordinates
+Outputs:
+    -   Bam file without PCR duplicates
+-----
 
+*samtools view*
+Converts sam output to bam
+Inputs:
+    -   Sam file
+Outputs:
+    -   Bam file
+Options:
+    -   -f filter the reads - 2 filters unmapped reads
+    -   -b output bam format
 -----
 
 *samtools index*
-
 Inputs:
-
--   Bam file
-
+    -   Bam file
 Outputs:
-
--   Bam index (bai) file
+    -   Bam index (bai) file
 
 ```{bash hisat, eval=FALSE}
 hisat2 --help
 
 hisat2 \
-  -x /reference/homo_sapiens/hg38/ucsc_assembly/illumina_download/Sequence/HiSat2Index/genome \
-  -1 input/inputFile_R1.fastq.gz \
-  -2 input/inputFile_R2.fastq.gz \
-  -p 8 \
-  --summary-file output/aligned/inputFile_Summary.txt | \
-samtools view \
-  -f 2 \
-  -b \
-  - | \
-samtools sort \
-  - \
+        -x /reference/homo_sapiens/hg38/ucsc_assembly/illumina_download/Sequence/HiSat2Index/genome \
+        -1 input/inputFile_R1.fastq.gz \
+        -2 input/inputFile_R2.fastq.gz \
+        -p 8 \
+        --summary-file output/aligned/inputFile_Summary.txt \
+    | samtools fixmate \
+        -m - - \
+    | samtools sort \
+        - \
+    | samtools markdup \
+        -r - - \
+    | samtools view \
+        -f 2 \
+        -b \
+        - \
     > output/aligned/inputFile.bam
 
 samtools index \
@@ -382,28 +382,31 @@ samtools index \
 ### Alternate - align with tophat
 
 *tophat*
-
 Inputs:
-
--   -p # of threads
--   -o output folder
-
+    -   -p # of threads
+    -   -o output folder
 Outputs:
-
--   accepted_hits.bam - Bam file of aligned reads
--   junctions.bed     - Bed file of intron junctions
--   insertions.bed    - Bed file of insertions
--   deletions.bed     - Bed file of deletions
+    -   accepted_hits.bam - Bam file of aligned reads
+    -   junctions.bed     - Bed file of intron junctions
+    -   insertions.bed    - Bed file of insertions
+    -   deletions.bed     - Bed file of deletions
 
 ```{bash tophat, eval=FALSE}
 tophat --help
 
-tophat -G /data/Indexes/Annotation/mm9.gtf \
-  -p 8 \
-  -o output/aligned \
-  /reference/homo_sapiens/hg38/ucsc_assembly/illumina_download/Sequence/HiSat2Index/genome \
-  input/inputFile_R1.fastq.gz \
-  input/inputFile_R2.fastq.gz
+tophat \
+    -G /data/Indexes/Annotation/mm9.gtf \
+    -p 8 \
+    -o output/aligned \
+    /reference/homo_sapiens/hg38/ucsc_assembly/illumina_download/Sequence/HiSat2Index/genome \
+    input/inputFile_R1.fastq.gz \
+    input/inputFile_R2.fastq.gz
+```
+
+## Run the alignments on the cluster
+
+```{bash actualAlignment, eval=TRUE}
+sbatch sbatchCmds/align_hisat.sh
 ```
 
 #### Check the percent of reads aligned to the genome
@@ -413,106 +416,6 @@ Ideally > 80%. If way off, look into what the other reads are.
 ### Look at alignment in IGV for sanity check
 
 `r knitr::include_graphics("IGV.png")`
-
-## Remove PCR duplicates
-
-*samtools collate*
-
-Sort by name
-
-Inputs:
-
--   Aligned bam file
-
-Outputs:
-
--   Sam file
-
-Options:
-
--   -@ # of threads
--   -O output to stdout
-
------
-
-*samtools fixmate*
-
-Fills in mate coordinates and insert size fields
-Input needs to be sorted by read name, not position
-
-Inputs:
-
--   Sam file
-
-Outputs:
-
--   Sam file of aligned reads
-
-Options:
-
--   -@ # of threads
--   -m add mate score tag
-
------
-
-*samtools sort*
-
-Sort by position - needed by samtools markdup
-
-Inputs:
-
--   Sam file
-
-Outputs:
-
--   Bam file
-
-Options:
-
--   -@ # of threads
--   -O output format
-
------
-
-*samtools markdup*
-
-Remove duplicates
-
-Inputs:
-
--   Bam file
-
-Outputs:
-
--   Bam file of aligned reads
-
-Options:
-
--   -@ # of threads
--   -r remove duplicates
-
-```{bash rmdup, eval=FALSE}
-samtools --help
-samtools fixmate --help
-
-samtools collate \
-  -@ 4
-  -O \
-  output/aligned/inputFile.bam | \
-samtools fixmate \
-  -@ 4 \
-  -m \
-  - \
-  - | \
-samtools sort \
-  -@ 4
-  -O BAM | \
-samtools markdup \
-  -@ 4 \
-  -r \
-  - \
-  output/aligned/rmdup/inputFile.bam
-```
 
 ## Count reads per gene
 
