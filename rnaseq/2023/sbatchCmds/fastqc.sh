@@ -1,5 +1,4 @@
 #!/bin/sh
-#SBATCH --account=gdrobertslab
 #SBATCH --array=0-23
 #SBATCH --error=slurmOut/fastqc-%j.txt
 #SBATCH --output=slurmOut/fastqc-%j.txt

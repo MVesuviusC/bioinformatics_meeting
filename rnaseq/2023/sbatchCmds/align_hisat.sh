@@ -1,5 +1,4 @@
 #!/bin/sh
-#SBATCH --account=gdrobertslab
 #SBATCH --array=0-23
 #SBATCH --error=slurmOut/align-%j.txt
 #SBATCH --output=slurmOut/align-%j.txt
@@ -21,10 +20,14 @@ r1_array=(input/fastqs/*.fastq.gz)
 # Use SLURM_ARRAY_TASK_ID to select the correct R1 file for this index
 r1_file=${r1_array[${SLURM_ARRAY_TASK_ID}]}
 
+# Get the basename of the R1 file by trimming off the path and .fastq.gz
+r1_base=${r1_file##*/}
+r1_base=${r1_base%.fastq.gz}
+
 echo ${HOSTNAME} ${SLURM_ARRAY_TASK_ID} ${r1_file}
 
 # Make variable with ref here since it's long
-ref=/reference/mus_musculus/mm10/ucsc_assmebly/illumina_download/Sequence/Hisat2Index/genome
+ref=/reference/mus_musculus/GRCm38/ensembl/release-86/Sequence/Hisat2Index/genome
 
 # Run hisat2
 hisat2 \
@@ -32,10 +35,7 @@ hisat2 \
         -U ${r1_file} \
         -k 1 \
         -p 10 \
-        --summary-file output/align/${sample_name}Summary.txt \
-    | samtools fixmate \
-        -@ 5 \
-        -m - - \
+        --summary-file output/align/${r1_base}Summary.txt \
     | samtools sort \
         -@ 5 \
         -m 5G \
@@ -44,9 +44,9 @@ hisat2 \
         -@ 5 \
         -r - - \
     | samtools view \
-        -f 2 \
+        -F 3 \
         -b \
         - \
-    > output/align/${sample_name}.bam
+    > output/align/${r1_base}.bam
 
-samtools index -@ 5 output/align/${sample_name}.bam
+samtools index -@ 5 output/align/${r1_base}.bam

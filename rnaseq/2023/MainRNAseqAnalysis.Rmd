@@ -34,6 +34,7 @@ for directoryName in \
     output/fastqc \
     output/multiqc \
     output/align \
+    output/geneCounts \
     output/figures \
     output/rdata \
     output/de \
@@ -344,7 +345,8 @@ Inputs:
 Outputs:
     -   Bam file
 Options:
-    -   -f filter the reads - 2 filters unmapped reads
+    -   -f filter the reads -f 2 filters reads mapped in proper pair
+                            -F 3 filters unmapped reads
     -   -b output bam format
 -----
 
@@ -415,7 +417,7 @@ Ideally > 80%. If way off, look into what the other reads are.
 
 ### Look at alignment in IGV for sanity check
 
-`r knitr::include_graphics("IGV.png")`
+`r knitr::include_graphics("misc/IGV.png")`
 
 ## Count reads per gene
 
@@ -451,19 +453,56 @@ featureCounts \
   -p \
   --countReadPairs \
   -s 0 \
-  output/aligned/rmdup/*.bam
+  output/aligned/*.bam
 ```
 
-## Differential expression analysis
+```{bash actualFeatureCounts, eval=TRUE}
+sbatch sbatchCmds/featureCounts.sh
+```
 
+## Use multiqc to evaluate how things have run so far
+
+```{bash multiqc, eval=TRUE}
+ml purge
+ml load GCC/9.3.0 \
+        OpenMPI/4.0.3 \
+        MultiQC/1.9-Python-3.8.2
+
+multiqc \
+    -o output/multiqc \
+    ./
+```
+
+## Principal component analysis and differential expression analysis
+
+
+### Prep data
 ```{r edgeR, eval=FALSE}
-gene_expr <- read_delim("output/geneCounts/combined.txt",
-                        delim = "\t",
-                        col_names = TRUE,
-                        comment = "#")
+gene_expr <-
+    read_tsv("output/geneCounts/geneCountTable.txt",
+             show_col_types = FALSE,
+             comment = "#") %>%
+    rename_with(~ str_remove(.x, ".+\\/") %>%
+                    str_remove(".bam"),
+                starts_with("output")) %>%
+    column_to_rownames("Geneid") %>%
+    select(starts_with("SRR"))
 
+metadata <-
+    read_csv("misc/MiiiceIiiiinSpaaaaaaaaaaaaace.csv",
+             show_col_types = FALSE) %>%
+    select("Run",
+           "CONDITION",
+           "Genotype") %>%
+    mutate(group = paste(CONDITION, Genotype, sep = "_")) %>%
+    arrange(match(colnames(gene_expr),
+                  Run)) %>%
+    rename(sample = Run)
 
-groups <- factor(c(1, 1, 1, 1, 1, 2, 2, 2, 2, 2))
+# Should be TRUE
+all(metadata$sample == colnames(gene_expr))
+
+groups <- factor(metadata$group)
 
 dataDGE <- DGEList(counts = gene_expr, group = groups)
 
@@ -479,18 +518,65 @@ design <- model.matrix(~ groups)
 
 dataDGE <- estimateDisp(dataDGE, design)
 
+norm_counts <-
+    as.data.frame(cpm(dataDGE))
+
+write_tsv(norm_counts,
+          file = "output/edgeROut/normCounts.txt",
+          col_names = TRUE)
+```
+
+
+## Run PCA
+```{r pca, eval=TRUE}
+pca_out <-
+    prcomp(t(norm_counts), scale = TRUE)
+
+pc_plus_metadata <-
+    pca_out$x[, 1:5] %>%
+    as.data.frame() %>%
+    rownames_to_column(var = "sample") %>%
+    as_tibble() %>%
+    left_join(metadata)
+
+variance <-
+    (pca_out$sdev)^2 / sum(pca_out$sdev^2) * 100
+names(variance) <- colnames(pca_out$x)
+
+plot(as.numeric(variance[1:10]))
+
+pca_all <-
+    ggplot(pc_plus_metadata,
+           aes(x = PC1,
+               y = PC2,
+               color = group)) +
+    geom_point(size = 2) +
+    ggrepel::geom_text_repel(aes(label = sample),
+                             size = 2,
+                             color = "gray") +
+    labs(x = paste0("PC1 (% var. = ",
+                    round(variance[1], 1),
+                    "%)"),
+         y = paste0("PC2 (% var. = ",
+                    round(variance[2], 1),
+                    "%)"),
+         title = "PCA of Mutant Mice From Outer Spaaaaaaace") +
+    scale_color_brewer(palette = "Paired",
+                       name = "Group")
+
+ggsave("output/figures/allSamplePCA.png",
+       plot = pca_all,
+       width = 8,
+       height = 6)
+```
+
+
+```{r eval=FALSE}
+
 tested <- exactTest(dataDGE)
 
 results <- topTags(tested, n = Inf)
 results$table$Gene <- rownames(results$table)
-
-norm_counts <- as.data.frame(cpm(dataDGE)) %>%
-  rownames_to_column(var = "Gene") %>%
-  as_tibble() %>%
-  mutate(mean_group1 = select(., matches("^Group1")) %>%
-           rowMeans(),
-         mean_group2 = select(., matches("^Group2")) %>%
-           rowMeans())
 
 write.table(norm_counts,
             file = "output/edgeROut/normCounts.txt",
