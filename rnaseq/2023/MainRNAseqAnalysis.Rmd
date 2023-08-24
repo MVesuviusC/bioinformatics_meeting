@@ -312,7 +312,7 @@ Inputs:
 
 Outputs:
 
-    -   Sam file sorted by position
+    -   Sam file sorted by read name
 
 Options:
 
@@ -321,7 +321,7 @@ Options:
     -   -2 R2.fastq.gz
     -   -U R1.fastq.gz # Only if single ended reads - instead of -1/-2
     -   -p # of threads
-    -   -k
+    -   -k # of hits per Sequence to return
     -   --summary-file location to write a summary of the alignment
 
 *samtools fixmate*
