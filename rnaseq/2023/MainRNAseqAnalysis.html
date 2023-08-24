@@ -1633,8 +1633,8 @@ done</code></pre>
 <div id="get-the-data" class="section level2">
 <h2>Get the data</h2>
 <p>I’m using prefetch and fasterq-dump to get the raw fastq files</p>
-<pre class="bash"><code>sbatch sbatch/getSRAData.sh</code></pre>
-<pre><code>## sbatch: error: Unable to open file sbatch/getSRAData.sh</code></pre>
+<pre class="bash"><code>sbatch sbatchCmds/getSRAData.sh</code></pre>
+<pre><code>## Submitted batch job 3986629</code></pre>
 </div>
 <div id="quality-control" class="section level2">
 <h2>Quality control</h2>
@@ -1832,7 +1832,7 @@ NCCCCATCTCATGCCACACGTCTTTCCCCCTCAATGACACCCCATCTCACGCCACGTGTCTTTCCCCCGCACAGACACCC
   --extract \
   input/fastqs/*.fastq.gz</code></pre>
 <pre class="bash"><code>sbatch sbatchCmds/fastqc.sh</code></pre>
-<pre><code>## Submitted batch job 3986539</code></pre>
+<pre><code>## Submitted batch job 3986653</code></pre>
 </div>
 </div>
 <div id="align-the-reads-to-a-reference-genome" class="section level2">
@@ -1957,7 +1957,7 @@ tophat \
 <h2>Run the alignments on the cluster</h2>
 <p>Here I’m using a sbatch file to submit the job to the slurm scheduler. I’m using an array job to submit all the files for alignment at the same time to save time.</p>
 <pre class="bash"><code>sbatch sbatchCmds/align_hisat.sh</code></pre>
-<pre><code>## Submitted batch job 3986563</code></pre>
+<pre><code>## Submitted batch job 3986677</code></pre>
 <div id="check-the-percent-of-reads-aligned-to-the-genome" class="section level4">
 <h4>Check the percent of reads aligned to the genome</h4>
 <p>Ideally &gt; 80%. If way off, look into what the other reads are.</p>
@@ -1998,7 +1998,7 @@ featureCounts \
   -s 0 \
   output/aligned/*.bam</code></pre>
 <pre class="bash"><code>sbatch sbatchCmds/featureCounts.sh</code></pre>
-<pre><code>## Submitted batch job 3986587</code></pre>
+<pre><code>## Submitted batch job 3986701</code></pre>
 </div>
 <div id="use-multiqc-to-evaluate-how-things-have-run-so-far" class="section level2">
 <h2>Use multiqc to evaluate how things have run so far</h2>
@@ -2009,17 +2009,19 @@ ml load GCC/9.3.0 \
 
 multiqc \
     -o output/multiqc \
-    ./</code></pre>
+    output/</code></pre>
 <pre><code>## [WARNING]         multiqc : MultiQC Version v1.15 now available!
 ## [INFO   ]         multiqc : This is MultiQC v1.9
 ## [INFO   ]         multiqc : Template    : default
-## [INFO   ]         multiqc : Searching   : /gpfs0/home2/gdrobertslab/mvc002/analyses/education/rnaseq/2023
+## [INFO   ]         multiqc : Searching   : /gpfs0/home2/gdrobertslab/mvc002/analyses/education/rnaseq/2023/output
 ## [INFO   ]  feature_counts : Found 24 reports
-## [INFO   ]         bowtie2 : Found 48 reports
+## [INFO   ]         bowtie2 : Found 24 reports
 ## [INFO   ]          fastqc : Found 24 reports
 ## [INFO   ]         multiqc : Compressing plot data
-## [INFO   ]         multiqc : Report      : output/multiqc/multiqc_report.html
-## [INFO   ]         multiqc : Data        : output/multiqc/multiqc_data
+## [WARNING]         multiqc : Previous MultiQC output found! Adjusting filenames..
+## [WARNING]         multiqc : Use -f or --force to overwrite existing reports instead
+## [INFO   ]         multiqc : Report      : output/multiqc/multiqc_report_1.html
+## [INFO   ]         multiqc : Data        : output/multiqc/multiqc_data_1
 ## [INFO   ]         multiqc : MultiQC complete</code></pre>
 </div>
 <div id="principal-component-analysis-and-differential-expression-analysis" class="section level2">
@@ -2054,33 +2056,31 @@ all(metadata$sample == colnames(gene_expr))</code></pre>
 
 dataDGE &lt;- DGEList(counts = gene_expr, group = groups)</code></pre>
 <pre><code>## Error in DGEList(counts = gene_expr, group = groups): could not find function &quot;DGEList&quot;</code></pre>
-<pre class="r"><code>keptDf &lt;- filterByExpr(dataDGE, min.count = 10)</code></pre>
-<pre><code>## Error in filterByExpr(dataDGE, min.count = 10): could not find function &quot;filterByExpr&quot;</code></pre>
+<pre class="r"><code>keptDf &lt;- filterByExpr(dataDGE, min.count = 1)</code></pre>
+<pre><code>## Error in filterByExpr(dataDGE, min.count = 1): could not find function &quot;filterByExpr&quot;</code></pre>
 <pre class="r"><code>dataDGE &lt;- dataDGE[keptDf, keep.lib.sizes = FALSE]</code></pre>
 <pre><code>## Error in eval(expr, envir, enclos): object 'dataDGE' not found</code></pre>
 <pre class="r"><code>dim(dataDGE$counts)</code></pre>
 <pre><code>## Error in eval(expr, envir, enclos): object 'dataDGE' not found</code></pre>
 <pre class="r"><code>dataDGE &lt;- calcNormFactors(dataDGE)</code></pre>
 <pre><code>## Error in calcNormFactors(dataDGE): could not find function &quot;calcNormFactors&quot;</code></pre>
-<pre class="r"><code>design &lt;- model.matrix(~ groups)</code></pre>
-<pre><code>## Error in `contrasts&lt;-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]): contrasts can be applied only to factors with 2 or more levels</code></pre>
-<pre class="r"><code>dataDGE &lt;- estimateDisp(dataDGE, design)</code></pre>
-<pre><code>## Error in estimateDisp(dataDGE, design): could not find function &quot;estimateDisp&quot;</code></pre>
+<pre class="r"><code>dataDGE &lt;- estimateDisp(dataDGE, model.matrix(~ groups))</code></pre>
+<pre><code>## Error in estimateDisp(dataDGE, model.matrix(~groups)): could not find function &quot;estimateDisp&quot;</code></pre>
 <pre class="r"><code>norm_counts &lt;-
     as.data.frame(cpm(dataDGE))</code></pre>
 <pre><code>## Error in cpm(dataDGE): could not find function &quot;cpm&quot;</code></pre>
 <pre class="r"><code>write_tsv(norm_counts,
-          file = &quot;output/edgeROut/normCounts.txt&quot;,
+          file = &quot;output/de/normCounts.txt&quot;,
           col_names = TRUE)</code></pre>
-<pre><code>## Error in write_tsv(norm_counts, file = &quot;output/edgeROut/normCounts.txt&quot;, : could not find function &quot;write_tsv&quot;</code></pre>
+<pre><code>## Error in write_tsv(norm_counts, file = &quot;output/de/normCounts.txt&quot;, col_names = TRUE): could not find function &quot;write_tsv&quot;</code></pre>
 </div>
 </div>
-<div id="run-pca" class="section level2">
-<h2>Run PCA</h2>
+<div id="run-pca-with-all-samples" class="section level2">
+<h2>Run PCA with all samples</h2>
 <pre class="r"><code>norm_counts &lt;-
-    read_tsv(&quot;output/edgeROut/normCounts.txt&quot;,
+    read_tsv(&quot;output/de/normCounts.txt&quot;,
              show_col_types = FALSE)</code></pre>
-<pre><code>## Error in read_tsv(&quot;output/edgeROut/normCounts.txt&quot;, show_col_types = FALSE): could not find function &quot;read_tsv&quot;</code></pre>
+<pre><code>## Error in read_tsv(&quot;output/de/normCounts.txt&quot;, show_col_types = FALSE): could not find function &quot;read_tsv&quot;</code></pre>
 <pre class="r"><code>pca_out &lt;-
     prcomp(t(norm_counts), scale = TRUE)</code></pre>
 <pre><code>## Error in t(norm_counts): object 'norm_counts' not found</code></pre>
@@ -2122,22 +2122,47 @@ dataDGE &lt;- DGEList(counts = gene_expr, group = groups)</code></pre>
        width = 8,
        height = 6)</code></pre>
 <pre><code>## Error in ggsave(&quot;output/figures/allSamplePCA.png&quot;, plot = pca_all, width = 8, : could not find function &quot;ggsave&quot;</code></pre>
-<pre class="r"><code>tested &lt;- exactTest(dataDGE)
+</div>
+<div id="run-de-analysis" class="section level2">
+<h2>Run DE analysis</h2>
+<pre class="r"><code>sub_metadata &lt;-
+    metadata %&gt;%
+    filter(Genotype == &quot;WT&quot;)
+
+sub_gene_expr &lt;-
+    gene_expr[, match(sub_metadata$sample,
+                      colnames(gene_expr))]
+
+# Should be TRUE
+all(sub_metadata$sample == colnames(sub_gene_expr))
+
+groups &lt;- factor(sub_metadata$group)
+
+dataDGE &lt;- DGEList(counts = sub_gene_expr, group = groups)
+
+dim(dataDGE)
+
+keptDf &lt;- filterByExpr(dataDGE, min.count = 1)
+
+dataDGE &lt;- dataDGE[keptDf, keep.lib.sizes = FALSE]
+
+dim(dataDGE$counts)
+
+dataDGE &lt;- calcNormFactors(dataDGE)
+
+dataDGE &lt;- estimateDisp(dataDGE, model.matrix(~ groups))
+
+tested &lt;- exactTest(dataDGE)
 
 results &lt;- topTags(tested, n = Inf)
 results$table$Gene &lt;- rownames(results$table)
 
-write.table(norm_counts,
-            file = &quot;output/edgeROut/normCounts.txt&quot;,
-            quote = FALSE,
-            sep = &quot;\t&quot;,
-            row.names = FALSE)
-
-results_df &lt;- results$table %&gt;%
-  left_join(., read_delim(&quot;refs/gene_info.txt.gz&quot;,
-                          delim = &quot;\t&quot;,
-                          escape_double = FALSE,
-                          trim_ws = TRUE) %&gt;%
+results_df &lt;-
+    results$table %&gt;%
+    left_join(., read_delim(&quot;refs/gene_info.txt.gz&quot;,
+                            delim = &quot;\t&quot;,
+                            escape_double = FALSE,
+                            trim_ws = TRUE) %&gt;%
               rename(Gene = `Gene stable ID version`) %&gt;%
               select(-`Transcript stable ID version`,
                      -`Transcript stable ID`,
@@ -2160,7 +2185,7 @@ write.table(results_df,
 ggplot(results$table, aes(x = logFC)) +
   geom_vline(xintercept = 0, color = &quot;red&quot;) +
   geom_histogram(bins = 100) +
-  ggtitle&quot;Histogram of logFC&quot;)
+  ggtitle(&quot;Histogram of logFC&quot;)
 
 # Histogram of p-values
 ggplot(results$table, aes(x = PValue)) +
@@ -2175,7 +2200,7 @@ ggplot(results$table, aes(x = FDR)) +
 # Volcano plot
 ggplot(results$table, aes(x = logFC,
                           y = -log10(PValue),
-                          color = FDR &lt;= 0.1)) +
+                          color = FDR &lt;= 0.1 &amp; abs(logFC) &gt; 1)) +
   geom_point(alpha = 0.5) +
   ggtitle(&quot;Volcano plot\nFDR &lt;= 0.1 denoted in blue&quot;)
 
@@ -2189,44 +2214,6 @@ ggplot(norm_counts,
   scale_y_log10() +
   scale_x_log10()</code></pre>
 </div>
-</div>
-<div id="pca-analysis" class="section level2">
-<h2>PCA analysis</h2>
-<pre class="r"><code># data frame of normalized count data
-  # for PCA, the genes need to be the columns with the values for each sample as a row
-norm_counts &lt;- read_delim(&quot;output/edgeROut/normCounts_fixed.txt&quot;,
-                          delim = &quot;\t&quot;,
-                          col_names = TRUE)
-
-pca &lt;- column_to_rownames(norm_counts, &quot;Sample&quot;) %&gt;%
-  prcomp(.)
-
-meta_data &lt;- read_delim(&quot;misc/metadata.txt&quot;,
-                        delim = &quot;\t&quot;,
-                        col_names = TRUE)
-
-pc_df &lt;- pca$x %&gt;%
-  as.data.frame() %&gt;%
-  rownames_to_column(var = &quot;Sample&quot;) %&gt;%
-  tibble() %&gt;%
-  left_join(meta_data) %&gt;%
-  left_join(norm_counts)
-
-explained &lt;- as.list((pca$sdev)^2 / sum(pca$sdev^2))
-names(explained) &lt;- colnames(pca$x)
-plot(as.numeric(explained[1:10]))
-
-ggplot(pc_df, aes(x = PC1,
-                  y = PC2,
-                  color = tissue_type)) +
-  geom_point()
-
-ggplot(pc_df, aes(x = PC1,
-                  y = PC2)) +
-  geom_point(alpha = 0.5, aes(size = PC3,
-                              color = tissue_type)) +
-  ggrepel::geom_text_repel(aes(label = Sample),
-                           size = 2)</code></pre>
 </div>
 </div>
 
