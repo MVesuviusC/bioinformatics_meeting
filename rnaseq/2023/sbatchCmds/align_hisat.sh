@@ -17,6 +17,7 @@ ml load HISAT2/2.2.1 \
 
 # make array with all the input R1 files
 r1_array=(input/fastqs/*.fastq.gz)
+
 # Use SLURM_ARRAY_TASK_ID to select the correct R1 file for this index
 r1_file=${r1_array[${SLURM_ARRAY_TASK_ID}]}
 
@@ -35,7 +36,7 @@ hisat2 \
         -U ${r1_file} \
         -k 1 \
         -p 10 \
-        --summary-file output/align/${r1_base}Summary.txt \
+        --summary-file output/align/${r1_base}.txt \
     | samtools sort \
         -@ 5 \
         -m 5G \
