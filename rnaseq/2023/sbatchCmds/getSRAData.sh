@@ -10,7 +10,7 @@
 #SBATCH --wait
 #SBATCH --time=24:00:00
 
-module load module load SRAToolkit/3.0.1
+module load SRAToolkit/3.0.1
 
 # Pull the SRA accession number from the csv file and make a bash array
 # The outer parenthesis make it an array
