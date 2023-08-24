@@ -70,23 +70,26 @@ We are going to analyze the RNAseq data from the thymus of four groups of mice.
 - C57BL/6 astronaut mice launched into orbit for 31 days
 - Mutant mice from outspace with Nrf2 knocked out launched into orbit for 31 days
 
-# Get the data
+# Analyses
+
+## Get the data
+
+I'm using prefetch and fasterq-dump to get the raw fastq files
 
 ```{bash getData, eval=TRUE}
-sbatch sbatch/getSRAData.sh
+sbatch sbatchCmds/getSRAData.sh
 ```
-
 
 ## Quality control
 
 ### Look at some of the data directly
 
-```{bash sneakPeak, eval=TRUE}
+```{bash sneakPeek, dependson='getData', eval=TRUE}
 zcat input/fastqs/SRR12005052.fastq.gz | head -n 40
 ```
 
 
-#### Good fastq
+### Good fastq
 ```
 @DB9GZKS1:667:HL3FCBCXY:1:1101:1432:2037 1:N:0:ACTTGA
 CCTTGATATTTGAAGGGTCTTGGTCGGATGAAAATTTAAGCCTTTACAAGAGCAGCAAACTCTTCAGCTCCGATCTTGCCGTCACCATCGCTGTCTCCGGC
@@ -134,7 +137,7 @@ CAAAAAAAGTTTTCATATAACACAGATGGATTTTTTATAACACAAACAAATTTAGTAACAAAGCAGGTGAGCGGTAAGAC
 DDDDDIIIIGHHIIIIHHIIIIIIIIIIIIIIIIIIIIIIGHHHIIIIIHIHIIIIIIIIIIIGIIIIIHIIIIIIIIIIIHIIIIIIHIIGFHIHIIIII
 ```
 
-#### Short trimmed reads
+### Short trimmed reads
 ```
 @A00498:249:H3VJNDRXY:1:2101:1398:1000 1:N:0:NAGAGGCA+ATCATGTT
 GTTTTACAGATGTGCACAAGTCTGACAGGCATCAGTTTGGTCTTCTTGAAAC
@@ -178,7 +181,7 @@ NTATTATTCGGCGCATGAGCTGGAGTCCTAGGCACAGCTCTAAGC
 #FF::FFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFFFFF
 ```
 
-#### Reads with bad quality on the end of some reads
+### Reads with bad quality on the end of some reads
 ```
 @A00498:249:H3VJNDRXY:1:2101:15356:1000 1:N:0:NAGAGGCA+ATCATGTT
 NTCTTGGAGAGGAAGCCGGAAGCTGCCTTCAAGAACACCCCCAGCTCAGCCCCTGTCTCTTATACACATCTCCGAGCCCACGAGACAAGAGGCAATCTCGTATTCCGTAGTATGCGTTTAAAAAGGGGGGGGGGGGGGGGGGGGGGGGGGG
@@ -217,28 +220,28 @@ NCCCCATCTCATGCCACACGTCTTTCCCCCTCAATGACACCCCATCTCACGCCACGTGTCTTTCCCCCGCACAGACACCC
 +
 #FFFFFFFFFF,FFFFFFFFFFF:F:FFFF,FFFFFF:FFFFFFFFFFFF:FFFF,,,F:,FFF,FFF,FFF,,F:,F:FFF,:,,,,,,F:,F,,,,,,:,,:FFF,:F,F,::,,F,F,F,,,:,:F,:,,,,,,,,:,,,,,,,,,,
 ```
+
 ### Look at summary of data quality using fastqc
 
 *fastqc*
-
 Inputs:
 
--   fastq.gz files
+    -   fastq.gz files
 
 Outputs:
 
--   A zip file/folder
-    -   Text file summaries
-    -   Images
-    -   Html file
--   An html file
-    -   Overall summary
+    -   A zip file/folder
+        -   Text file summaries
+        -   Images
+        -   Html file
+    -   An html file
+        -   Overall summary
 
 Options:
 
--   -o Output folder
--   -t # of threads
--   --extract Extract zip folder
+    -   -o Output folder
+    -   -t # of threads
+    -   --extract Extract zip folder
 
 ```{bash fastqc, eval=FALSE}
 fastqc \
@@ -248,9 +251,10 @@ fastqc \
   input/fastqs/*.fastq.gz
 ```
 
-```{bash actualFastqc, eval=TRUE}
+```{bash actualFastqc, dependson='getData', eval=TRUE}
 sbatch sbatchCmds/fastqc.sh
 ```
+
 ## Align the reads to a reference genome
 
 Pre-built references available on Franklin:
@@ -279,10 +283,15 @@ Pre-built references available on Franklin:
 
 *hisat2-build*
 Inputs:
+
     -   Reference fasta file
+
 Outputs:
+
     -   Several *.ht2 files
+
 Options:
+
     -   -p # of threads
 
 ```{bash hisatBuild, eval=FALSE}
@@ -297,11 +306,16 @@ hisat2-build \
 *hisat2*
 Aligns fastq reads to the reference genome
 Inputs:
+
     -   fastq.gz files
     -   Reference
+
 Outputs:
+
     -   Sam file sorted by position
+
 Options:
+
     -   -x Reference genome
     -   -1 R1.fastq.gz
     -   -2 R2.fastq.gz
@@ -309,51 +323,65 @@ Options:
     -   -p # of threads
     -   -k
     -   --summary-file location to write a summary of the alignment
------
 
 *samtools fixmate*
 Marks which reads are PCR duplicates
 Inputs:
+
     -   Sam file sorted by read name
+
 Outputs:
+
     -   Sam file with additional info
------
 
 *samtools sort*
 Sort the output by position - needed to index and view in IGV
 Inputs:
+
     -   Bam file
+
 Outputs:
+
     -   Sorted bam file
+
 Options:
+
     -   -@ # of threads
     -   -m how much memory to use per thread
------
 
 *samtools markdup*
 Removes PCR duplicates
 Inputs:
+
     -   Bam file sorted by coordinates
+
 Outputs:
+
     -   Bam file without PCR duplicates
------
 
 *samtools view*
 Converts sam output to bam
 Inputs:
+
     -   Sam file
+
 Outputs:
+
     -   Bam file
+
 Options:
+
     -   -f filter the reads -f 2 filters reads mapped in proper pair
                             -F 3 filters unmapped reads
     -   -b output bam format
------
 
 *samtools index*
 Inputs:
+
     -   Bam file
+
 Outputs:
+
     -   Bam index (bai) file
 
 ```{bash hisat, eval=FALSE}
@@ -385,9 +413,12 @@ samtools index \
 
 *tophat*
 Inputs:
+
     -   -p # of threads
     -   -o output folder
+
 Outputs:
+
     -   accepted_hits.bam - Bam file of aligned reads
     -   junctions.bed     - Bed file of intron junctions
     -   insertions.bed    - Bed file of insertions
@@ -406,8 +437,9 @@ tophat \
 ```
 
 ## Run the alignments on the cluster
+Here I'm using a sbatch file to submit the job to the slurm scheduler. I'm using an array job to submit all the files for alignment at the same time to save time.
 
-```{bash actualAlignment, eval=TRUE}
+```{bash actualAlignment, dependson='getData', eval=TRUE}
 sbatch sbatchCmds/align_hisat.sh
 ```
 
@@ -416,6 +448,13 @@ sbatch sbatchCmds/align_hisat.sh
 Ideally > 80%. If way off, look into what the other reads are.
 
 ### Look at alignment in IGV for sanity check
+
+```{bash igv, eval=FALSE}
+ml purge
+ml load IGV/2.8.0-Java-11.0.2
+
+igv.sh
+```
 
 `r knitr::include_graphics("misc/IGV.png")`
 
@@ -427,21 +466,21 @@ Count number of reads per gene
 
 Inputs:
 
--   Bam files
--   Gtf file of gene locations
+    -   Bam files
+    -   Gtf file of gene locations
 
 Outputs:
 
--   Table of reads per gene
+    -   Table of reads per gene
 
 Options:
 
--   -T # of threads
--   -a Gene annotation
--   -o output file
--   -p Paired end libraries
--   --countReadPairs Count read pairs not reads
--   -s Stranded libraries or not
+    -   -T # of threads
+    -   -a Gene annotation
+    -   -o output file
+    -   -p Paired end libraries (omit if single-ended)
+    -   --countReadPairs Count read pairs not reads
+    -   -s Stranded libraries or not
 
 ```{bash featureCounts, eval=FALSE}
 featureCounts --help
@@ -456,13 +495,13 @@ featureCounts \
   output/aligned/*.bam
 ```
 
-```{bash actualFeatureCounts, eval=TRUE}
+```{bash actualFeatureCounts, dependson='actualAlignment', eval=TRUE}
 sbatch sbatchCmds/featureCounts.sh
 ```
 
 ## Use multiqc to evaluate how things have run so far
 
-```{bash multiqc, eval=TRUE}
+```{bash multiqc, dependson='actualFeatureCounts', eval=TRUE}
 ml purge
 ml load GCC/9.3.0 \
         OpenMPI/4.0.3 \
@@ -470,14 +509,13 @@ ml load GCC/9.3.0 \
 
 multiqc \
     -o output/multiqc \
-    ./
+    output/
 ```
 
 ## Principal component analysis and differential expression analysis
 
-
 ### Prep data
-```{r edgeR, eval=FALSE}
+```{r normData, dependson='actualFeatureCounts', eval=TRUE}
 gene_expr <-
     read_tsv("output/geneCounts/geneCountTable.txt",
              show_col_types = FALSE,
@@ -506,7 +544,7 @@ groups <- factor(metadata$group)
 
 dataDGE <- DGEList(counts = gene_expr, group = groups)
 
-keptDf <- filterByExpr(dataDGE, min.count = 10)
+keptDf <- filterByExpr(dataDGE, min.count = 1)
 
 dataDGE <- dataDGE[keptDf, keep.lib.sizes = FALSE]
 
@@ -514,21 +552,21 @@ dim(dataDGE$counts)
 
 dataDGE <- calcNormFactors(dataDGE)
 
-design <- model.matrix(~ groups)
-
-dataDGE <- estimateDisp(dataDGE, design)
+dataDGE <- estimateDisp(dataDGE, model.matrix(~ groups))
 
 norm_counts <-
     as.data.frame(cpm(dataDGE))
 
 write_tsv(norm_counts,
-          file = "output/edgeROut/normCounts.txt",
+          file = "output/de/normCounts.txt",
           col_names = TRUE)
 ```
 
-
-## Run PCA
-```{r pca, eval=TRUE}
+## Run PCA with all samples
+```{r pca, dependson='normData', eval=TRUE}
+norm_counts <-
+    read_tsv("output/de/normCounts.txt",
+             show_col_types = FALSE)
 pca_out <-
     prcomp(t(norm_counts), scale = TRUE)
 
@@ -554,10 +592,10 @@ pca_all <-
     ggrepel::geom_text_repel(aes(label = sample),
                              size = 2,
                              color = "gray") +
-    labs(x = paste0("PC1 (% var. = ",
+    labs(x = paste0("PC1 (%var. = ",
                     round(variance[1], 1),
                     "%)"),
-         y = paste0("PC2 (% var. = ",
+         y = paste0("PC2 (%var. = ",
                     round(variance[2], 1),
                     "%)"),
          title = "PCA of Mutant Mice From Outer Spaaaaaaace") +
@@ -570,25 +608,47 @@ ggsave("output/figures/allSamplePCA.png",
        height = 6)
 ```
 
+## Run DE analysis
 
 ```{r eval=FALSE}
+sub_metadata <-
+    metadata %>%
+    filter(Genotype == "WT")
+
+sub_gene_expr <-
+    gene_expr[, match(sub_metadata$sample,
+                      colnames(gene_expr))]
+
+# Should be TRUE
+all(sub_metadata$sample == colnames(sub_gene_expr))
+
+groups <- factor(sub_metadata$group)
+
+dataDGE <- DGEList(counts = sub_gene_expr, group = groups)
+
+dim(dataDGE)
+
+keptDf <- filterByExpr(dataDGE, min.count = 1)
+
+dataDGE <- dataDGE[keptDf, keep.lib.sizes = FALSE]
+
+dim(dataDGE$counts)
+
+dataDGE <- calcNormFactors(dataDGE)
+
+dataDGE <- estimateDisp(dataDGE, model.matrix(~ groups))
 
 tested <- exactTest(dataDGE)
 
 results <- topTags(tested, n = Inf)
 results$table$Gene <- rownames(results$table)
 
-write.table(norm_counts,
-            file = "output/edgeROut/normCounts.txt",
-            quote = FALSE,
-            sep = "\t",
-            row.names = FALSE)
-
-results_df <- results$table %>%
-  left_join(., read_delim("refs/gene_info.txt.gz",
-                          delim = "\t",
-                          escape_double = FALSE,
-                          trim_ws = TRUE) %>%
+results_df <-
+    results$table %>%
+    left_join(., read_delim("refs/gene_info.txt.gz",
+                            delim = "\t",
+                            escape_double = FALSE,
+                            trim_ws = TRUE) %>%
               rename(Gene = `Gene stable ID version`) %>%
               select(-`Transcript stable ID version`,
                      -`Transcript stable ID`,
@@ -614,7 +674,7 @@ write.table(results_df,
 ggplot(results$table, aes(x = logFC)) +
   geom_vline(xintercept = 0, color = "red") +
   geom_histogram(bins = 100) +
-  ggtitle"Histogram of logFC")
+  ggtitle("Histogram of logFC")
 
 # Histogram of p-values
 ggplot(results$table, aes(x = PValue)) +
@@ -629,7 +689,7 @@ ggplot(results$table, aes(x = FDR)) +
 # Volcano plot
 ggplot(results$table, aes(x = logFC,
                           y = -log10(PValue),
-                          color = FDR <= 0.1)) +
+                          color = FDR <= 0.1 & abs(logFC) > 1)) +
   geom_point(alpha = 0.5) +
   ggtitle("Volcano plot\nFDR <= 0.1 denoted in blue")
 
@@ -642,47 +702,5 @@ ggplot(norm_counts,
   ggtitle("Scatterplot of mean CPM values") +
   scale_y_log10() +
   scale_x_log10()
-
 ```
-
-## PCA analysis
-
-```{r PCA, eval=FALSE}
-# data frame of normalized count data
-  # for PCA, the genes need to be the columns with the values for each sample as a row
-norm_counts <- read_delim("output/edgeROut/normCounts_fixed.txt",
-                          delim = "\t",
-                          col_names = TRUE)
-
-pca <- column_to_rownames(norm_counts, "Sample") %>%
-  prcomp(.)
-
-meta_data <- read_delim("misc/metadata.txt",
-                        delim = "\t",
-                        col_names = TRUE)
-
-pc_df <- pca$x %>%
-  as.data.frame() %>%
-  rownames_to_column(var = "Sample") %>%
-  tibble() %>%
-  left_join(meta_data) %>%
-  left_join(norm_counts)
-
-explained <- as.list((pca$sdev)^2 / sum(pca$sdev^2))
-names(explained) <- colnames(pca$x)
-plot(as.numeric(explained[1:10]))
-
-ggplot(pc_df, aes(x = PC1,
-                  y = PC2,
-                  color = tissue_type)) +
-  geom_point()
-
-ggplot(pc_df, aes(x = PC1,
-                  y = PC2)) +
-  geom_point(alpha = 0.5, aes(size = PC3,
-                              color = tissue_type)) +
-  ggrepel::geom_text_repel(aes(label = Sample),
-                           size = 2)
-```
-
 

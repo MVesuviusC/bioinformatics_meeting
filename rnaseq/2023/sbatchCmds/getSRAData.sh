@@ -1,8 +1,7 @@
 #!/bin/sh
-#SBATCH --account=gdrobertslab
 #SBATCH --array=0-23
-#SBATCH --error=slurmOut/getSRA.txt
-#SBATCH --output=slurmOut/getSRA.txt
+#SBATCH --error=slurmOut/getSRA-%j.txt
+#SBATCH --output=slurmOut/getSRA-%j.txt
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
