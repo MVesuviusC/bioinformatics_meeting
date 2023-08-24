@@ -41,9 +41,6 @@ hisat2 \
         -@ 5 \
         -m 5G \
         -O BAM \
-    | samtools markdup \
-        -@ 5 \
-        -r - - \
     | samtools view \
         -F 3 \
         -b \
