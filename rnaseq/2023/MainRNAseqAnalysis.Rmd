@@ -476,7 +476,7 @@ Outputs:
 Options:
 
     -   -T # of threads
-    -   -a Gene annotation
+    -   -a Gene annotation gtf
     -   -o output file
     -   -p Paired end libraries (omit if single-ended)
     -   --countReadPairs Count read pairs not reads
