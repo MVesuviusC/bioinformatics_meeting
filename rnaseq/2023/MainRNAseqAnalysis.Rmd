@@ -882,18 +882,13 @@ gsea_out <-
     filter(padj < 0.05)
 
 write_tsv(gsea_out,
-          file = paste0("output/gsea/",
-                        item
-                        ,
-                        "category_",
-                        cat_tib$category[i],
-                        ".tsv"))
+          file = "output/gsea/gsea_out.tsv")
 
-head(result)
+head(gsea_out)
 
 my_fav_path <- "KEGG_MISMATCH_REPAIR"
-fav_path_index <- grep(my_fav_path, result$pathway)
-fav_path_genes <- result$leadingEdge[[fav_path_index]]
+fav_path_index <- grep(my_fav_path, gsea_out$pathway)
+fav_path_genes <- gsea_out$leadingEdge[[fav_path_index]]
 
 # Lets look at the expression of genes in this pathway
 fav_path_expr <-

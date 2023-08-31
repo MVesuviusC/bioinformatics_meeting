@@ -2402,21 +2402,28 @@ gsea_out &lt;-
     filter(padj &lt; 0.05)
 
 write_tsv(gsea_out,
-          file = paste0(&quot;output/gsea/&quot;,
-                        item
-                        ,
-                        &quot;category_&quot;,
-                        cat_tib$category[i],
-                        &quot;.tsv&quot;))</code></pre>
-<pre><code>## Error in paste0(&quot;output/gsea/&quot;, item, &quot;category_&quot;, cat_tib$category[i], : object 'item' not found</code></pre>
-<pre class="r"><code>head(result)</code></pre>
-<pre><code>## Error in head(result): object 'result' not found</code></pre>
+          file = &quot;output/gsea/gsea_out.tsv&quot;)
+
+head(gsea_out)</code></pre>
+<pre><code>##                          pathway         pval         padj   log2err        ES
+## 1:                 KEGG_RIBOSOME 2.150394e-08 3.612662e-06 0.7337620 0.5597801
+## 2:              KEGG_SPLICEOSOME 2.050462e-07 1.564936e-05 0.6901325 0.4500988
+## 3:          KEGG_DNA_REPLICATION 1.181803e-03 1.323619e-02 0.4550599 0.5239164
+## 4:               KEGG_CELL_CYCLE 4.022218e-06 8.718963e-05 0.6105269 0.4213961
+## 5: KEGG_HOMOLOGOUS_RECOMBINATION 3.021752e-03 2.030617e-02 0.4317077 0.5538182
+## 6:          KEGG_MISMATCH_REPAIR 8.124376e-03 4.023628e-02 0.3807304 0.5618913
+##         NES size                             leadingEdge
+## 1: 2.302181   82    Rps29,Rps27,Rps16,Fau,Uba52,Rpl9,...
+## 2: 1.933401  122   Lsm5,Snrpd2,Lsm8,Cwc15,Syf2,Snrpg,...
+## 3: 1.844767   35  Rpa3,Pcna,Prim1,Rpa1,Rnaseh2b,Fen1,...
+## 4: 1.812387  120 Cdkn2c,Cdkn2d,Cdc20,E2f2,Cdk1,Ccnb2,...
+## 5: 1.788332   26  Rad54b,Rpa3,Eme1,Mus81,Rad51c,Rpa1,...
+## 6: 1.778919   22      Rpa3,Pcna,Rpa1,Msh6,Pold4,Pms2,...</code></pre>
 <pre class="r"><code>my_fav_path &lt;- &quot;KEGG_MISMATCH_REPAIR&quot;
-fav_path_index &lt;- grep(my_fav_path, result$pathway)</code></pre>
-<pre><code>## Error in is.factor(x): object 'result' not found</code></pre>
-<pre class="r"><code>fav_path_genes &lt;- result$leadingEdge[[fav_path_index]]</code></pre>
-<pre><code>## Error in eval(expr, envir, enclos): object 'result' not found</code></pre>
-<pre class="r"><code># Lets look at the expression of genes in this pathway
+fav_path_index &lt;- grep(my_fav_path, gsea_out$pathway)
+fav_path_genes &lt;- gsea_out$leadingEdge[[fav_path_index]]
+
+# Lets look at the expression of genes in this pathway
 fav_path_expr &lt;-
     norm_counts[rownames(norm_counts) %in% fav_path_genes, ] %&gt;%
     rownames_to_column(&quot;gene&quot;) %&gt;%
@@ -2435,12 +2442,11 @@ fav_path_expr &lt;-
                        my_fav_path,
                        &quot;pathway&quot;)) +
     scale_fill_brewer(palette = &quot;Paired&quot;)</code></pre>
-<pre><code>## Error in rownames(norm_counts) %in% fav_path_genes: object 'fav_path_genes' not found</code></pre>
+<pre><code>## Joining with `by = join_by(sample)`</code></pre>
 <pre class="r"><code>ggsave(&quot;output/figures/fav_path_expr.png&quot;,
        plot = fav_path_expr,
        width = 10,
        height = 6)</code></pre>
-<pre><code>## Error in plot_theme(plot): object 'fav_path_expr' not found</code></pre>
 </div>
 </div>
 
