@@ -20,6 +20,7 @@ gene_gtf=/reference/mus_musculus/GRCm38/ensembl/release-86/Annotation/Genes/gtf/
 featureCounts \
   -T 10 \
   -a ${gene_gtf} \
+  -g gene_name \
   -o output/geneCounts/geneCountTable.txt \
   -s 2 \
   output/align/*.bam
