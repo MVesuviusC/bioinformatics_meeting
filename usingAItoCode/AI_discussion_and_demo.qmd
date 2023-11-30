@@ -12,7 +12,7 @@ Essentially, AI in this context is generally a model built from massive datasets
 Major league hot topic right now
 New developments every day, so this talk is already out of date
 
-ChatGPT 3.5 was built in 2022, so it's information is not up to date
+ChatGPT 3.5 was trained on data up to 2022, so it's information is not up to date
 Same for any other model, it's only as up to date as the data it was trained on
 
 Comes in a few forms
@@ -57,6 +57,7 @@ What can it do?
     - Passwords
     - Sensitive data
     - etc
+    - Are files outside of your code exposed?
 - Don't put code you want to keep private in your prompts
     - https://www.pcmag.com/news/samsung-bans-chatgpt-after-engineers-use-it-to-fix-proprietary-code
 - The company providing the service can see your prompts and likely trawls for fun stuff
@@ -76,6 +77,9 @@ library(foreach)
 
 
 ```
+
+## Do the same thing in chatGPT
+
 
 # Explain code
 # Document code
@@ -119,6 +123,7 @@ mutate.data.frame <- function(.data,
   out
 }
 ```
+
 
 # Improve code
 
