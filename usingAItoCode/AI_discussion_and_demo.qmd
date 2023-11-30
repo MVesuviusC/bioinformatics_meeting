@@ -1,0 +1,319 @@
+---
+title: "Coding using AI"
+format: html
+---
+
+# Coding using AI
+
+## Introduction
+
+Essentially, AI in this context is generally a model built from massive datasets to make predictions about what code you're going to want to write
+
+Major league hot topic right now
+New developments every day, so this talk is already out of date
+
+ChatGPT 3.5 was built in 2022, so it's information is not up to date
+Same for any other model, it's only as up to date as the data it was trained on
+
+Comes in a few forms
+External to an IDE
+
+- ChatGPT
+- Bing chat
+- Google Bard
+- Claude AI
+- Chinchilla
+- YouChat AI
+- ...
+
+Inside an IDE
+
+- TabNine
+- GitHub Copilot
+- Blackbox
+- Codium
+- Amazon CodeWhisperer
+- Amazon Q
+- ...
+
+What can it do?
+
+- Write code
+- Write tests
+- Write documentation
+- Write comments
+- Write commit messages
+- Suggest code improvements
+- Suggest alternate analyses
+- Suggest bug fixes
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+☼_*Security concerns*_☼
+
+- Your prompts are sent outside NCH to a third party
+- Don't put sensitive information in your prompts
+    - PHI
+    - Passwords
+    - Sensitive data
+    - etc
+- Don't put code you want to keep private in your prompts
+    - https://www.pcmag.com/news/samsung-bans-chatgpt-after-engineers-use-it-to-fix-proprietary-code
+- The company providing the service can see your prompts and likely trawls for fun stuff
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+
+```{r}
+library(tidyverse)
+library(doParallel)
+library(foreach)
+```
+
+```{r}
+# Write a loop to use mtcars and count the number of unique items in each column
+
+
+```
+
+# Explain code
+# Document code
+# Make unit tests
+```{r}
+mutate.data.frame <- function(.data,
+                              ...,
+                              .by = NULL,
+                              .keep = c("all", "used", "unused", "none"),
+                              .before = NULL,
+                              .after = NULL) {
+  keep <- arg_match0(.keep, values = c("all", "used", "unused", "none"))
+
+  by <- compute_by({{ .by }}, .data, by_arg = ".by", data_arg = ".data")
+
+  cols <- mutate_cols(.data, dplyr_quosures(...), by)
+  used <- attr(cols, "used")
+
+  out <- dplyr_col_modify(.data, cols)
+
+  names_original <- names(.data)
+
+  out <- mutate_relocate(
+    out = out,
+    before = {{ .before }},
+    after = {{ .after }},
+    names_original = names_original
+  )
+
+  names_new <- names(cols)
+  names_groups <- by$names
+
+  out <- mutate_keep(
+    out = out,
+    keep = keep,
+    used = used,
+    names_new = names_new,
+    names_groups = names_groups
+  )
+
+  out
+}
+```
+
+# Improve code
+
+## My original code
+```{r}
+start_time <- Sys.time()
+storms <- storms
+
+aug_oct_storms <-
+    storms %>%
+    filter(month %in% c(8, 10))
+
+aug_oct_actual_press_diff <-
+    aug_oct_storms %>%
+    group_by(month) %>%
+    summarize(mean_pressure = mean(pressure, na.rm = TRUE), .groups = "drop") %>%
+    summarize(diff = mean_pressure[2] - mean_pressure[1]) %>%
+    pull(diff)
+
+# Permute over the data to randomly assign months to the data
+# Then measure the difference between August (month = 8) and October (month = 10)
+# to test if there is a difference in storm pressure between the two months
+
+perm_diffs <- c()
+perm_number <- 0
+while (perm_number < 1000) {
+    perm_diff <-
+        aug_oct_storms %>%
+        mutate(month = sample(month)) %>%
+        group_by(month) %>%
+        summarize(mean_pressure = mean(pressure, na.rm = TRUE), .groups = "drop") %>%
+        summarize(diff = mean_pressure[2] - mean_pressure[1]) %>%
+        pull(diff)
+
+    perm_diffs <- c(perm_diffs, perm_diff)
+
+    perm_number <- perm_number + 1
+}
+
+perm_is_bigger <- sum(abs(perm_diffs) > abs(aug_oct_actual_press_diff))
+
+hist(perm_diffs, n = 100)
+
+perm_is_bigger / length(perm_diffs)
+message(length(perm_diffs), " total iterations done")
+end_time <- Sys.time()
+end_time - start_time
+
+```
+
+
+## After asking it to improve the code
+```{r}
+start_time <- Sys.time()
+storms <- storms
+
+aug_oct_storms <- storms %>% filter(month %in% c(8, 10))
+
+aug_oct_actual_press_diff <- aug_oct_storms %>%
+  group_by(month) %>%
+  summarize(mean_pressure = mean(pressure, na.rm = TRUE), .groups = "drop") %>%
+  summarize(diff = mean_pressure[2] - mean_pressure[1]) %>%
+  pull(diff)
+
+# Define a function to calculate permuted difference
+perm_diff_func <- function() {
+  aug_oct_storms %>%
+    mutate(month = sample(month)) %>%
+    group_by(month) %>%
+    summarize(mean_pressure = mean(pressure, na.rm = TRUE), .groups = "drop") %>%
+    summarize(diff = mean_pressure[2] - mean_pressure[1]) %>%
+    pull(diff)
+}
+
+# Use replicate to generate permuted differences
+perm_diffs <- replicate(1000, perm_diff_func())
+
+perm_is_bigger <- sum(abs(perm_diffs) > abs(aug_oct_actual_press_diff))
+
+hist(perm_diffs, n = 100)
+
+perm_is_bigger / length(perm_diffs)
+message(length(perm_diffs), " total iterations done")
+
+end_time <- Sys.time()
+end_time - start_time
+
+```
+
+## After asking it to make it parallel
+```{r}
+start_time <- Sys.time()
+storms <- storms
+
+aug_oct_storms <- storms %>% filter(month %in% c(8, 10))
+
+aug_oct_actual_press_diff <- aug_oct_storms %>%
+  group_by(month) %>%
+  summarize(mean_pressure = mean(pressure, na.rm = TRUE), .groups = "drop") %>%
+  summarize(diff = mean_pressure[2] - mean_pressure[1]) %>%
+  pull(diff)
+
+# Define a function to calculate permuted difference
+perm_diff_func <- function() {
+  aug_oct_storms |>
+    dplyr::mutate(month = sample(month)) |>
+    dplyr::group_by(month) |>
+    dplyr::summarize(mean_pressure = mean(pressure, na.rm = TRUE), .groups = "drop") |>
+    dplyr::summarize(diff = mean_pressure[2] - mean_pressure[1]) |>
+    dplyr::pull(diff)
+}
+
+# Set up parallel backend
+cl <- makeCluster(detectCores())
+registerDoParallel(cl)
+
+# Use foreach to generate permuted differences in parallel
+perm_diffs <- foreach(i = 1:1000, .combine = c) %dopar% perm_diff_func()
+
+# Stop the cluster
+stopCluster(cl)
+
+perm_is_bigger <- sum(abs(perm_diffs) > abs(aug_oct_actual_press_diff))
+
+hist(perm_diffs, n = 100)
+
+perm_is_bigger / length(perm_diffs)
+message(length(perm_diffs), " total iterations done")
+
+end_time <- Sys.time()
+end_time - start_time
+```
+
+
+# Generate commit messages
+
+
+
+
+# Fix bugs
+```{r}
+cutoff_val <- 0.05
+pval <- 0.0001
+
+if (pval < cutoff_val & pval >= 0.001) {
+    print("Significant")
+} else if (< 0.001) {
+    print("Very significant")
+} else {
+    print("Not significant")
+}
+```
+
+```{r}
+library(patchwork)
+years <- factor(c("1978", "2020"))
+plot_list <- list()
+for (year in years) {
+    print(paste(year,
+                "wind range:",
+                min(storms$wind),
+                max(storms$wind)))
+    print(paste(year,
+                "pressure range:",
+                min(storms$pressure),
+                max(storms$pressure)))
+
+    print(2023 - year)
+
+    for (limit in c("pressure", "wind")) {
+        title_text <- paste("Pressure from Storms in ", year)
+
+        plot_list[[paste(year, limit)]] <-
+            storms %>%
+            filter(year == year) %>%
+            ggplot(aes(x = get(limit))) +
+            geom_histogram(bins = 100) +
+            labs(title = title_text,
+                y = "Count",
+                x = str_to_title(limit))
+    }
+}
+
+(plot_list[[1]] + plot_list[[2]]) / (plot_list[[3]] + plot_list[[4]])
+# Why are they all the same!?!?!?!?
+```
+
+# Suggest alternate analyses
+
+# Prompt engineering
+https://en.wikipedia.org/wiki/Prompt_engineering
+
+# Be wary of "almost right but subtly wrong" code
+
+## Write code to read in a vcf file and count the number of variants in sliding windows across each chromosome
+```{r}
+
+```
