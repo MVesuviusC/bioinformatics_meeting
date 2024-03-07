@@ -1,0 +1,140 @@
+
+### Lets try to figure out where the tumors are systematically
+
+I don't want to do this by hand, so I'll use a marker gene.
+
+Lets start by plotting the marker gene to see what cutoff to use.
+```{r plotMarker}
+merged_data <- qs::qread("output/rdata/merged_data.qs")
+col_plot <-
+    SpatialFeaturePlot(merged_data,
+                       features = "Col1a1",
+                       pt.size.factor = 1)
+ggsave("output/figures/col1a1_spatial_plot.png",
+       col_plot,
+       width = 10,
+       height = 5)
+
+vln_plot <-
+    VlnPlot(merged_data,
+            features = c("Col1a1"),
+            split.by = "seurat_clusters",
+            cols = sample(rainbow(50)))
+ggsave("output/figures/col1a1_vln_plot.png",
+       vln_plot,
+       width = 10,
+       height = 5)
+```
+
+### Lets try a cutoff of 3
+
+Keep in mind tumor content of each spot isn't going to be 0/1, so if our cutoff isn't perfect it's not the end of the world.
+```{r tryCutoff}
+col_cutoff <- 3
+```
+
+### Yeah...
+
+So this is a bit of munging to get the clusters of spots with median marker gene expression. If you want to see how it works run it line by line in the console.
+```{r plotCol}
+high_col <-
+    GetAssayData(merged_data) %>%
+    as.matrix() %>%
+    t() %>%
+    as.data.frame() %>%
+    select(Col1a1) %>%
+    rownames_to_column("spot") %>%
+    left_join(merged_data@meta.data %>%
+             as.data.frame() %>%
+             select(seurat_clusters) %>%
+             rownames_to_column("spot")) %>%
+    group_by(seurat_clusters) %>%
+    summarize(col1a1_median = median(Col1a1)) %>%
+    arrange(desc(col1a1_median)) %>% # Put them in order so we can use this later
+    filter(col1a1_median > col_cutoff) %>%
+    pull(seurat_clusters)
+
+merged_data$high_col <- merged_data$seurat_clusters %in% high_col
+
+qs::qsave(merged_data, "output/rdata/merged_data_w_col.qs")
+
+plot_name <-
+    SpatialDimPlot(merged_data,
+                   group.by = "high_col",
+                   pt.size.factor = 1)
+ggsave("output/figures/spatial_tumor_calls.png",
+       plot_name,
+       width = 10,
+       height = 5)
+
+plot_name <-
+    DimPlot(merged_data,
+            group.by = c("high_col"),
+            split.by = "sample_id")
+ggsave("output/figures/high_col_umap.png",
+       plot_name,
+       width = 8,
+       height = 5)
+```
+
+### Lets subset out just the tumor
+
+```{r subsetTumor}
+tumor_only <- subset(merged_data, subset = high_col == TRUE)
+```
+
+### Try DE between core of the tumor and just around it
+
+Just for kicks, lets compare the core of the tumor to the cells just around it.
+
+SCTransform is giving me fits here. You need to run PrepSCTFindMarkers() before FindMarkers() or it will error out. But PrepSCTFindMarkers() errors out because of the interal structure of the Seurat object. It expects one of the slots inside to be named "RNA" for some reason.
+
+see https://github.com/satijalab/seurat/issues/8235
+```{r try_de}
+tumor_only$RNA <- tumor_only$Spatial
+DefaultAssay(tumor_only) <- "RNA"
+tumor_only <- SCTransform(tumor_only, assay = "RNA")
+tumor_only_de <-
+    PrepSCTFindMarkers(tumor_only) %>%
+    FindMarkers(ident.1 = high_col[1], ident.2 = high_col[2])
+
+write_tsv(tumor_only_de, "output/tumor_only_de.tsv")
+
+DT::datatable(tumor_only_de)
+```
+
+### Lets plot the top genes
+
+```{r plotTopGenes}
+top_genes_up <-
+    tumor_only_de %>%
+    rownames_to_column(var = "gene") %>%
+    filter(avg_log2FC > 0) %>%
+    slice_head(n = 6)
+
+plot_name <-
+    SpatialFeaturePlot(no_trt,
+                       features = top_genes_up$gene,
+                       pt.size.factor = 1,
+                       ncol = 2)
+ggsave("output/figures/top_genes_up.png",
+       plot_name,
+       width = 10,
+       height = 15)
+
+top_genes_down <-
+    tumor_only_de %>%
+    rownames_to_column(var = "gene") %>%
+    filter(avg_log2FC < 0) %>%
+    slice_head(n = 6)
+
+plot_name <-
+    SpatialFeaturePlot(no_trt,
+                       features = top_genes_down$gene,
+                       pt.size.factor = 1,
+                       ncol = 2)
+ggsave("output/figures/top_genes_down.png",
+       plot_name,
+       width = 10,
+       height = 15)
+```

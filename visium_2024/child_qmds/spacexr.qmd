@@ -1,0 +1,170 @@
+To run spacexr, we need:
+
+Single-Cell Reference
+In order to run RCTD, the first step is to process the single cell reference. The reference is created using the RCTD Reference constructor function, which requires 3 parameters:
+1. counts: A matrix (or dgCmatrix) representing Digital Gene Expression (DGE). Rownames should be genes and colnames represent barcodes/cell names. Counts should be untransformed count-level data.
+2. cell_types:
+A named (by cell barcode) factor of cell type for each cell. The ‘levels’ of the factor would be the possible cell type identities.
+3. nUMI:
+Optional, a named (by cell barcode) list of total counts or UMI’s appearing at each pixel. If not provided, nUMI will be assumed to be the total counts appearing on each pixel.
+
+### Load reference data to create single cell matrix
+
+This is a bunch of single cell data we generated with similar sample types that was annotated. I'm going to smash it all together and use that as a reference for deconvolution.
+```{r load_ref_data}
+macs <- qs::qread("/home/gdrobertslab/lab/Analysis/Ryan/epithelial/output/rdata/macs_subclustered_cleaned.qs")
+macs$cell_type <- qs::qread("/home/gdrobertslab/lab/Analysis/Ryan/epithelial/misc/murine_macs_assignments.qs")
+
+murine_aec <- qs::qread("/home/gdrobertslab/lab/Analysis/Ryan/epithelial/output/rdata/murine_aec_post-filtering.qs")
+murine_aec <- RenameIdents(murine_aec,
+    `0` = "DATP",
+    `1` = "AEC2",
+    `2` = "DATP",
+    `3` = "pAEC2",
+    `4` = "cAEC2",
+    `5` = "AEC1",
+    `6` = "cAEC2")
+
+murine_aec$cell_type <- Idents(murine_aec)
+
+ref_path <- "/home/gdrobertslab/lab/GenRef/sc_ref_datasets/mouse"
+mouse_lung_ref <- qs::qread(paste0(ref_path, "/GSE151974/mouse_lung_ref.qs"))
+
+f420 <- qs::qread("/home/gdrobertslab/mvc002/analyses/roberts/24_Ley_barcodes/output/rdata/sobj_list.qs")[[2]]
+f420$has_bc <- !is.na(f420$lt)
+tumor_cell_cluster <-
+    table(f420$has_bc, f420$seurat_clusters) %>%
+    as.data.frame() %>%
+    filter(Var1 == TRUE) %>%
+    arrange(desc(Freq)) %>%
+    pull(Var2) %>%
+    head(n = 1)
+f420 <- subset(f420, seurat_clusters == tumor_cell_cluster)
+f420$cell_type <- "Tumor"
+```
+
+### Merge and process reference data
+```{r process_ref_data}
+all_ref <-
+    merge(mouse_lung_ref, list(macs, murine_aec, f420)) %>%
+    process_seurat()
+
+plot_name <-
+    DimPlot(all_ref,
+            group.by = "cell_type",
+            label = TRUE,
+            repel = TRUE) +
+    NoLegend()
+
+ggsave("output/figures/spacexr_ref_data.png",
+       plot_name,
+       width = 10,
+       height = 10)
+```
+
+### Create the Reference object
+
+```{r spacexr_reference}
+spacexr_reference <-
+    spacexr::Reference(GetAssayData(all_ref, layer = "counts"),
+                       as.factor(all_ref$cell_type))
+```
+
+### Lets load in or create the rest of the data we need
+
+```{r}
+merged_data <- qs::qread("output/rdata/merged_data.qs")
+
+coords <-
+    rbind(GetTissueCoordinates(merged_data, image = "slice1"),
+          GetTissueCoordinates(merged_data, image = "slice1.2")) %>%
+    rename(x = imagerow, y = imagecol)
+```
+
+### Create the SpatialRNA object
+
+```{r spacexr_spatialrna}
+my_data <-
+    spacexr::SpatialRNA(coords,
+                        GetAssayData(merged_data, layer = "counts"))
+```
+
+### Ok, now lets run it
+```{r run_spacexr}
+rctd_obj <-
+    spacexr::create.RCTD(my_data, spacexr_reference, max_cores = 2)
+
+rctd_out <-
+    spacexr::run.RCTD(rctd_obj, doublet_mode = "full")
+
+qs::qsave(rctd_out, "output/rdata/rctd_out.qs")
+```
+
+### Now lets visualize the results
+
+We start by adding the "norm_weights" to the metadata of the merged data. Then we can plot the cell types and the tumor cells.
+```{r plot_spacexr_celltypes}
+norm_weights <-
+    spacexr::normalize_weights(rctd_out@results$weights)
+
+merged_data <-
+    AddMetaData(merged_data, norm_weights)
+
+for (cell_type in c("angioMacs",
+                    "Alv Mf",
+                    "Mono",
+                    "Int Mf",
+                    "Interstitial")) {
+    subset_data <-
+        merged_data[, !is.na(merged_data[[cell_type]])]
+
+    plot_name <-
+        SpatialFeaturePlot(subset_data,
+                           features = c(cell_type, "Tumor"),
+                           ncol = 2)
+
+    ggsave(paste0("output/figures/spacexr_",
+                  cell_type,
+                  ".png"),
+           plot_name,
+           width = 10,
+           height = 10)
+}
+```
+
+### Lets plot the cell types that make up the areas in and around the tumor
+
+```{r}
+labels <- list("9" = "core",
+               "3" = "middle",
+               "5" = "periphery")
+
+for(cluster_number in names(labels)) {
+    tumor_c_celltypes <-
+        subset(merged_data, seurat_clusters == cluster_number)@meta.data %>%
+        select(colnames(norm_weights)) %>%
+        as_tibble() %>%
+        pivot_longer(everything()) %>%
+        group_by(name) %>%
+        mutate(median_value = median(value, na.rm = TRUE)) %>%
+        ungroup() %>%
+        mutate(name = factor(name) %>%
+               fct_reorder(median_value),
+               factor_number = as.numeric(name)) %>%
+        filter(factor_number >= max(factor_number) - 10) %>%
+        ggplot(aes(y = name, x = value)) +
+        geom_boxplot() +
+        geom_point() +
+        labs(x = "Normalized Weight",
+             y = "Cell Type",
+             title = paste0("Tumor Cell Types in the ",
+                            labels[[cluster_number]]))
+
+    ggsave(paste0("output/figures/spacexr_tumor_",
+                  labels[[cluster_number]],
+                  "_celltypes.png"),
+        tumor_c_celltypes,
+        width = 8,
+        height = 10)
+}
+```

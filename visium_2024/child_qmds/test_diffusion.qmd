@@ -1,0 +1,93 @@
+### Load all the datas
+
+I want to look at how much RNA is leaking out of the tissue onto the slide. I've always been a bit dubious of Visium since if your RNA diffuses too far to the side, you'll get a lot of background. We can see that happening if the RNAs diffuse out of the tissue, and that might give me some idea of if it's happening **inside** the tissue. I'm going to look at the nCount_Spatial to see if there's a lot of RNA outside of the tissue.
+
+I want to load all of the spots, but that data is excluded by default. I need to specify two things to get all my data.
+
+- `filter.matrix = FALSE` to tell Seurat not to filter based on if the spot is on the tissue or not
+- `filename = "raw_feature_bc_matrix.h5"` to get the raw data instead of the filtered data by spaceranger
+
+This took me an embarassingly long time to figure out.
+
+I'm just going to look at one sample here.
+
+```{r loadRawSpatial}
+no_trt <-
+    Load10X_Spatial("/home/gdrobertslab/lab/Counts_2/SP0001/outs/",
+                    filename = "raw_feature_bc_matrix.h5",
+                    filter.matrix = FALSE)
+```
+
+### Add coordinates and other metadata to @meta.data
+
+GetTissueCoordinates() doesn't give me all the info I want, so I do brain surgery to get the data I want.
+```{r addCoordsToMeta}
+no_trt <- AddMetaData(no_trt, no_trt@images$slice1@coordinates)
+```
+
+### Lets plot histograms of nCount_Spatial for spots on or off the tissue
+
+```{r plotNcount}
+plot_name <-
+    ggplot(no_trt@meta.data,
+           aes(x = nCount_Spatial,
+               fill = tissue)) +
+    geom_histogram(bins = 200) +
+    facet_wrap(~tissue, ncol = 1, scales = "free_y") +
+    scale_x_log10()
+ggsave("output/figures/nCount_Spatial_hists_by_tissue.png",
+       plot_name,
+       width = 6,
+       height = 6)
+```
+
+### Lets highlight spots outside the tissue with "high" UMI counts
+
+```{r highNcountOutside}
+no_trt$high_nCount_outside <- no_trt$nCount_Spatial > 100 & no_trt$tissue == 0
+```
+
+### Lets plot to see which spots those are
+
+```{r plotSpatial_high}
+plot_name <-
+    SpatialDimPlot(no_trt,
+                   group.by = "high_nCount_outside",
+                   pt.size.factor = 0.5)
+ggsave("output/figures/high_nCount_outside.png",
+       plot_name,
+       width = 6,
+       height = 6)
+```
+
+### Now lets plot the number of UMIs per spot across the whole slide
+
+I'm going to use the log10 of the nCount_Spatial to make the plot more readable.
+
+```{r plotSpatial_nCount}
+no_trt$log10_nCount_Spatial <- log10(no_trt$nCount_Spatial + 1)
+
+plot_name <-
+    SpatialPlot(no_trt,
+                features = c("log10_nCount_Spatial"),
+                pt.size.factor = 0.5)
+ggsave("output/figures/log10_nCount_Spatial.png",
+       plot_name,
+       width = 6,
+       height = 6)
+
+plot_name <-
+    SpatialPlot(subset(no_trt,
+                       row > 50 &
+                       row < 90 &
+                       col > 90 &
+                       col < 135),
+                features = c("log10_nCount_Spatial"),
+                pt.size.factor = 1)
+ggsave("output/figures/log10_nCount_Spatial_zoom.png",
+       plot_name,
+       width = 6,
+       height = 6)
+```
+
+Eh, it's better than I expected though there is still definitely diffusion going on. Hopefully within the tissue it's not as bad.

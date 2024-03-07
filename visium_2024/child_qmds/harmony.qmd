@@ -1,0 +1,72 @@
+# Lets try harmony on the spatial data
+
+Spatial data is very batch-effect-y. We need to correct for this. We can use the `harmony` package to do this.
+
+I'm not convinced we need to run harmony here. Both samples were processes on the same visium chip and from the same experiment, but lets try it out. When I look at the UMAP, there are two clusters that correspond to the samples, but the spots with tumor all cluster together.
+
+```{r get_data}
+merged_data <- qs::qread("output/rdata/merged_data_w_col.qs")
+```
+
+### Lets plot the clusters before Harmony for later comparison
+```{r plot_og_clusters}
+og_plot_name <-
+    SpatialDimPlot(merged_data,
+                   ncol = 2,
+                   pt.size.factor = 1,
+                   label = TRUE)
+
+og_dimplot <-
+    DimPlot(merged_data,
+            group.by = c("sample_id", "seurat_clusters"))
+```
+
+### Lets run Harmony and harmonize by the sample_id
+
+We then re-process things using the harmony embeddings.
+
+** Keep in mind that Harmony won't fix our DE analysis **
+```{r run_harmony}
+harm_data <-
+    harmony::RunHarmony(merged_data, group.by.vars = "sample_id") %>%
+    RunUMAP(reduction = "harmony", dims = 1:30) %>%
+    FindNeighbors(dims = 1:30, reduction = "harmony") %>%
+    FindClusters(resolution = 0.6)
+```
+
+### Lets make some plots to see how the harmony worked
+
+```{r plot_harmony}
+new_clusters <-
+    SpatialDimPlot(harm_data,
+                   ncol = 2,
+                   pt.size.factor = 1,
+                   label = TRUE)
+
+combined_plot <- og_plot_name / new_clusters
+ggsave("output/figures/harmony_spatial_plot.png",
+       combined_plot,
+       width = 15,
+       height = 10)
+
+new_dimplot <-
+    DimPlot(harm_data,
+            group.by = c("sample_id", "seurat_clusters"))
+
+combined_dimplot <- og_dimplot / new_dimplot
+ggsave("output/figures/harmony_spatial_dimplot.png",
+       combined_dimplot,
+       width = 15,
+       height = 10)
+
+plot_name <-
+    DimPlot(harm_data,
+            group.by = "high_col",
+            split.by = "sample_id")
+ggsave("output/figures/harmony_col1a1.png",
+       plot_name,
+       width = 15,
+       height = 10)
+```
+
+It worked ok, I'm still not convinced. I think I'd have to go through and look at the cell type proportions to see if I believe that we need Harmony correction.

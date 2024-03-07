@@ -1,0 +1,134 @@
+### Read in raw data
+
+We're going to load the data and analyze it with Seurat.
+
+I should have done this in a loop but this was a quick/dirty analysis.
+
+It is recommended to use SCTransform instead of regular log normalization
+https://satijalab.org/seurat/articles/spatial_vignette#data-preprocessing
+```{r loadData_1}
+no_trt <-
+    Load10X_Spatial("/home/gdrobertslab/lab/Counts_2/SP0001/outs/",
+                    filename = "filtered_feature_bc_matrix.h5") %>%
+    subset(nCount_Spatial > 0) %>%
+    SCTransform(assay = "Spatial")
+```
+
+### Add tissue coordinates to the Seurat object
+
+I am going to need to filter down the Seurat objects to get rid of spots outside of the tissue, so I'm going to need the tissue coordinates. Note that GetTissueCoordinates inclues rownames matching the spots, so AddMetaData() will use those to match things up.
+
+```{r addMetaData_1}
+no_trt <- AddMetaData(no_trt, GetTissueCoordinates(no_trt))
+```
+
+### Lets plot where spaceranger marked as "tissue"
+
+```{r plotTissueCoords_1}
+GetTissueCoordinates(no_trt) %>%
+    ggplot(aes(x = imagerow, y = imagecol)) +
+    geom_point()
+```
+
+All those points out in space are probably not tissue. I'm going to filter them out.
+
+Looking at the axes, it looks like the tissue is in the upper left corner. I'm going to filter out anything with a row or column less than 0.
+
+```{r plotSpatialCounts_1}
+SpatialPlot(no_trt, features = "nCount_Spatial", pt.size.factor = 1) +
+    theme_bw()
+
+subset(no_trt, imagerow > 0 & imagecol > 0) %>%
+    SpatialPlot(features = "nCount_Spatial", pt.size.factor = 1) +
+    theme_bw()
+```
+
+The plot looks much better, so lets apply this cutoff to our data.
+We also add the sample name to the metadata.
+```{r subsetData_1}
+no_trt <- subset(no_trt, imagerow > 0 & imagecol > 0)
+no_trt$sample_id <- "SP0001"
+```
+
+### Do all the same stuff for sample 2
+
+Again, this should have been a loop, but I was hurrying through and lazy.
+
+The x and y coordinates are a bit trickier, so I had to do some trial and error to get the right cutoffs.
+```{r doSample_2}
+trt <-
+    Load10X_Spatial("/home/gdrobertslab/lab/Counts_2/SP0002/outs/",
+                    filename = "filtered_feature_bc_matrix.h5") %>%
+    subset(nCount_Spatial > 0) %>%
+    SCTransform(assay = "Spatial")
+
+trt <- AddMetaData(trt, GetTissueCoordinates(trt))
+
+GetTissueCoordinates(trt) %>%
+    ggplot(aes(x = imagerow, y = imagecol)) +
+    geom_point()
+
+subset(trt, imagerow < 600 & imagecol > 0 & imagecol < 375) %>%
+    SpatialPlot(features = "nCount_Spatial", pt.size.factor = 1) +
+    theme_bw()
+
+trt <- subset(trt, subset = imagerow < 600 & imagecol > 0 & imagecol < 375)
+trt$sample_id <- "SP0002"
+```
+
+Not perfect, but good enough, in a real analysis I'd get rid of that last spot
+
+Note, since I did cytassist which is probe based. I didn't get any mitochondrial genes. If I had, I would have added the percent mitochondrial genes to the metadata.
+
+One thing to note is that for normal single cell, we filter out cell with high mito content or few reads. Here, we really just want to filter down to the tissue, so we don't want to filter based on nCount_Spatial or percent mitochondrial genes.
+
+
+### Lets merge the two datasets and do some analysis.
+
+I then rerun the processing steps.
+
+One thing to note is picking a resolution. Here we have a more concrete way of determining what resolution to use for FindClusters(). I just tried several and saw how the clusters looked relative to the H&E. I chose a cutoff that split the center of the tumors, with a band around it and a perpheral cluster. This is a bit arbitrary, but it's a good starting point.
+```{r mergeData}
+merged_data <- merge(no_trt, trt) %>%
+    SCTransform(assay = "Spatial") %>%
+    RunPCA(assay = "SCT") %>%
+    FindNeighbors(dims = 1:30) %>%
+    FindClusters(resolution = 0.9)  %>%
+    RunUMAP(dims = 1:30)
+
+qs::qsave(merged_data, file = "output/rdata/merged_data.qs")
+```
+
+I save the data here so I can load it in the next time I run the notebook. This is a good practice to get into, as it makes the notebook reproducible and easy to jump into the middle of the analysis. You can also grab the data in other child qmds without having to rerun the loading bit.
+
+### Lets plot the data to look at it
+```{r plotStuff}
+plot_name <-
+    SpatialDimPlot(merged_data,
+                   pt.size = 1,
+                   label = TRUE)
+ggsave("output/figures/cluster_dim_plot.png",
+       plot_name,
+       width = 15,
+       height = 15)
+
+plot_name <-
+    DimPlot(merged_data,
+            label = TRUE,
+            repel = TRUE,
+            split.by = "sample_id")
+ggsave("output/figures/umap_plot_by_cluster_split.png",
+       plot_name,
+       width = 15,
+       height = 10)
+
+plot_name <-
+    DimPlot(merged_data,
+            label = TRUE,
+            repel = TRUE,
+            group.by = "sample_id")
+ggsave("output/figures/umap_plot_by_sample.png",
+       plot_name,
+       width = 15,
+       height = 10)
+```

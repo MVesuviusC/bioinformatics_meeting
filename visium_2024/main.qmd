@@ -1,0 +1,95 @@
+---
+title: "Data Analysis of Spatial Test"
+author: "Matt Cannon"
+date: "`r format(Sys.time(), '%m/%d/%Y')`"
+format:
+    html:
+        toc: true
+        toc_float: true
+        toc_depth: 5
+        number_sections: false
+        code-fold: true
+        code-link: true
+        df-print: kable
+        self-contained: true
+execute:
+    cache: true
+knitr:
+    opts_chunk:
+        cache.lazy: false
+lightbox: true
+---
+
+# Sample summary
+
+- 10x Visium run with cytassist
+- 2 samples
+    - Section with tumors
+    - Section with less tumors
+
+# Load packages
+
+```{r lib}
+library(tidyverse)
+library(Seurat)
+library(rrrSingleCellUtils)
+theme_set(theme_bw())
+
+# Set random generator seed to facilitate reproducibility
+set.seed(888)
+```
+
+## Make up directory structure
+```{bash mkdirs, eval=TRUE}
+for directoryName in \
+  output \
+  output/figures \
+  output/rdata \
+  output/de
+do
+  if [ ! -d ${directoryName} ]
+  then
+    mkdir -p ${directoryName}
+  fi
+done
+```
+
+## Run spaceranger to generate fastq files
+
+Make sure you correct your sample sheet before running spaceranger
+```{bash spaceranger}
+#| eval: false
+sbatch spaceranger_mkfastq2.sh
+```
+
+## Run cellranger count to generate count matrices
+
+```{bash cellranger}
+#| eval: false
+sbatch spaceranger_count.sh
+```
+
+## Read in all data and process it for downstream analysis
+List of seurat object saved to `output/rdata/sobj_list.qs`
+
+{{< include child_qmds/load_data.qmd >}}
+
+## Lets try doing differential expression on the spots with lots of tumor
+
+{{< include child_qmds/de_tumor.qmd >}}
+
+## Look at how much the RNA difusses around outside of the tissue
+
+{{< include child_qmds/test_diffusion.qmd >}}
+
+## Run spot deconvolution to get cell type proportions for each spot
+
+{{< include child_qmds/spacexr.qmd >}}
+
+## Run harmony to remove batch effects
+
+{{< include child_qmds/harmony.qmd >}}
+
+```{r sessionInfo}
+sessionInfo()
+```
