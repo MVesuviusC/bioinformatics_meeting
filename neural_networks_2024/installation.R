@@ -16,13 +16,14 @@
 remotes::install_github("rstudio/tensorflow")
 
 library(reticulate)
-#install_python(version = "3.11")
+install_python(version = "3.11")
 
 library(tensorflow)
 #install_tensorflow(envname = "r-tensorflow", python_version = "3.9")
-
+#
 #install.packages("keras")
 library(keras)
+# We may want to specify conda = "/path/to/miniforge3/bin/conda" - not sure what it does by default
 install_keras(
     method = "conda",
     envname = "r-tensorflow",

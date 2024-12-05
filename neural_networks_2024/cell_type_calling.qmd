@@ -395,8 +395,8 @@ model_fit_data <-
         epochs = 200,
         callbacks = callback_early_stopping(
             monitor = 'val_accuracy',
-            patience = 3,
-            min_delta = 0.02,
+            patience = 5,
+            min_delta = 0.01,
             restore_best_weights = TRUE
         ),
         verbose = 2
@@ -466,4 +466,11 @@ evaluate(dropout_model, t(test_data), test_label_numbers)
 ```
 
 Note how the plot of the model accuracy and loss shows that the model converges faster and more accurately with the learning rate schedule. This is a good example of how hyperparameter tuning can improve model performance.
+
+Some further considerations:
+
+- We are assuming that the data are properly annotated in the first place. Hopefully this is true. But if the annotations are wrong, that may explain why our confusion matrix is not perfect. Our model could also be wrong, but it's worth checking the annotations.
+- We used the top 500 genes. This may have been not enough genes to predict the cell types accurately. We could try using more genes to see if that improves the model without impacting computational time or overfitting.
+- I didn't really try many model architectures. You'd likely want to try many different architectures to see which one works best for your data. This is a good starting point, but you'd likely want to try many more models to see which one works best. The validation data can help with this so that you can test the model's performance on new data once you think it's working well.
+- Batching your training data can help speed up training. I didn't do this here, but you may want to try this to see if it speeds up training.
 
