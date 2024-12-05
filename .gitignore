@@ -3,3 +3,7 @@ rnaseq/2023/slurmOut
 rnaseq/2023/MainRNAseqAnalysis_cache
 rnaseq/2023/output
 rnaseq/2023/MainRNAseqAnalysis_files
+neural_networks_2024/cell_type_calling_files
+neural_networks_2024/cell_type_calling_cache
+neural_networks_2024/input/human_retina.rds
+neural_networks_2024/output/rdata
