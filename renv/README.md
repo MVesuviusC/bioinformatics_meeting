@@ -20,6 +20,8 @@ Be careful. If you have code in your project that uses any non-base R packages, 
 
 Make sure you're using the proper R version for the project. We should likely make a note of the R version in the main qmd file.
 
+When using VScode, make sure you enable the "Use Renv Lib Path" setting in the R extension settings, to avoid getting errors about jsonlite not being installed even though it totally is. You'll need to restart vscode for this to take affect.
+
 # Installing packages
 Keep in mind you may need to load modules before you install some packages. See https://gist.github.com/MVesuviusC/8aa0cce0a01a72caeacbd048f8046d08 for example.
 
