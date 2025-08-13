@@ -1,0 +1,939 @@
+---
+title: "Coding Best Practices in Bioinformatics"
+author: "Matt Cannon"
+date: "`r format(Sys.time(), '%m/%d/%Y')`"
+format:
+    html:
+        toc: true
+        toc_float: true
+        toc_depth: 5
+        number_sections: false
+        code-fold: true
+        code-link: true
+        df-print: kable
+        embed-resources: true
+execute:
+    cache: true
+knitr:
+    opts_chunk:
+        cache.lazy: false
+        cache.vars: ""
+        warning: false
+        message: false
+lightbox: true
+---
+
+# Introduction
+
+Writing code is no longer a niche skill but a fundamental part of modern biological research. This document will guide you through some best practices for writing code and organizing your analyses. Adopting these practices will make your work more reproducible, easier to understand for others (and your future self!), and ultimately more efficient.
+
+# Project Organization
+
+A well-organized project is the foundation of reproducible research. When you can easily find your data, code, and results, you save time and reduce the risk of errors.
+
+## Consistent Project Structure
+
+Imagine returning to a project after six months. Would you be able to find everything? A consistent directory structure is crucial. Here's an example structure for a bioinformatics project:
+
+```
+Matts_lab/
+├── data/
+│   └── raw/
+│       └── sequencing_reads.fastq.gz
+├── analyses/
+│   └── my_project/
+│       ├── data/
+│       │   └── raw/
+│       │       └── sequencing_reads.fastq.gz (symlink)
+│       ├── results/
+│       │   ├── figures/
+│       │   │   └── volcano_plot.png
+│       │   └── tables/
+│       │       └── differential_expression.csv
+│       ├── metadata/
+│       │   └── sample_metadata.csv
+│       ├── scripts/
+│       │   ├── process_data.py
+│       │   ├── analyze_data.sh
+│       │   └── utils.pl
+│       ├── child_qmds/
+│       │   ├── intro.qmd
+│       │   ├── methods.qmd
+│       │   └── results.qmd
+│       ├── parent.qmd
+│       └── README.md
+```
+
+*   **`data/`**: Contains all project data.
+    *   **`raw/`**: Raw, unprocessed data. This should be treated as read-only. See the note below.
+    *   **`processed/`**: Data that has been cleaned or transformed.
+*   **`results/`**: All output from your analysis.
+    *   **`figures/`**: Plots and figures.
+    *   **`tables/`**: Tables of results.
+*   **`metadata/`**: Contains metadata files, such as sample information.
+*   **`scripts/`**: Reserved for scripts written in languages like Bash, Python, or Perl. These scripts perform specific tasks, such as data processing or analysis, and are separate from the Quarto documents.
+*   **`child_qmds/`**: Contains child Quarto documents that are included in the main `parent.qmd` file. This structure keeps the project organized and makes it easier to manage large reports.
+*   **`parent.qmd`**: The main Quarto document that combines the content from the child documents in `child_qmds/`. This serves as the entry point for rendering the full report.
+*   **`README.md`**: A file describing the project, its goals, and how to run the analysis.
+
+#### A Note on Storing Raw Data
+For many bioinformatics projects, raw data files (like FASTQ or BAM files) can be extremely large. It is often impractical to copy this data into every project folder that uses it. Furthermore, the same raw data may be used across multiple different analyses or projects.
+
+For these reasons, it's a common and recommended practice to store large, raw data files in a central location outside of your individual project directories. You can then create symbolic links (symlinks) from your project's `data/raw/` directory to the central data location or just pull the data directly from the central location. This avoids data duplication and makes it easier to manage. Your code can then read the data from `data/raw/` as if it were physically there. **Crucially, your raw data should be treated as read-only. You can enforce this by setting the file permissions so that you and others cannot accidentally modify or delete the original files.** For example, on Linux or macOS (or using Git Bash on Windows), you can use the `chmod` command to set specific permissions:
+
+```bash
+# Set read-only permissions for owner and group, and no permissions for others
+chmod 440 my_raw_data.fastq.gz
+```
+This command sets the permissions to read-only (`4`) for the file's owner and group, and provides no (`0`) permissions for others. This is a common setup in a shared environment to protect data. This is a critical step in ensuring the integrity and reproducibility of your analysis.
+
+```bash
+ln -s \
+    /path/to/central/data/raw/sequencing_reads.fastq.gz \
+    /path/to/project/data/raw/sequencing_reads.fastq.gz
+```
+
+### Project Templates
+
+To maintain consistency across all your projects, you can create a project template. This is simply a directory with the structure and basic files outlined above that you can copy over for each new project.
+
+```bash
+cp -r /path/to/project/template /path/to/new/project
+```
+
+# Organizing Code in Quarto
+
+Quarto documents are a fantastic way to combine your code, results, and narrative. How you organize your code within these documents matters.
+
+## Organizing Code Chunks
+
+Keep your code chunks small and focused on a single task. This makes your document easier to read and debug. Give your chunks descriptive names. This also facilitates code caching.
+
+**Bad Example:** A single, massive code chunk that does everything. Practically, this one is small, but imagine it's 2000 lines long.
+
+```{r}
+# This chunk loads data, processes it, and makes a plot
+# It's hard to read and debug (or would be if it were real code)
+data <- read.csv("data/processed/counts.csv")
+data <- data[rowSums(data) > 10, ]
+data_long <- reshape2::melt(data)
+library(ggplot2)
+ggplot(data_long, aes(x = variable, y = value)) +
+    geom_boxplot()
+```
+
+**Good Example:** Breaking the process into logical, named chunks.
+
+```{r libraries}
+library(ggplot2)
+library(reshape2)
+```
+
+```{r load-data}
+# Load the processed count data
+counts <- read.csv("data/processed/counts.csv")
+```
+
+```{r filter-data}
+# Filter out low-count genes
+filtered_counts <- counts[rowSums(counts) > 10, ]
+```
+
+```{r plot-data}
+# Create a boxplot of the filtered data
+library(ggplot2)
+library(reshape2)
+counts_long <- melt(filtered_counts)
+ggplot(counts_long, aes(x = variable, y = value)) +
+    geom_boxplot() +
+    labs(title = "Distribution of Gene Counts", x = "Sample", y = "Counts")
+```
+
+# Code Caching in Quarto
+
+Quarto supports code caching to improve the efficiency of document rendering. When caching is enabled, Quarto saves the results of code chunks so that they do not need to be re-executed unless their inputs change. This can significantly speed up the rendering process, especially for computationally intensive analyses.
+
+## Enabling Code Caching
+
+To enable caching for your Quarto document, include the following in your YAML header:
+
+```yaml
+execute:
+  cache: true
+```
+
+This setting enables caching for all code chunks in the document. However, you can also enable or disable caching for individual chunks using the `cache` option:
+
+```{r example-chunk, cache=true}
+# This chunk will be cached
+result <- some_expensive_computation()
+```
+
+## Variable Caching with `cache.vars`
+
+The `cache.vars` option allows you to specify which variables should be cached. This is useful when you want to cache only specific variables rather than the entire chunk. For example:
+
+```{r cache-specific-vars, cache.vars="important_var"}
+# Only the variable `important_var` will be cached
+important_var <- compute_important_value()
+auxiliary_var <- compute_auxiliary_value()
+```
+
+In this example, only `important_var` will be cached. If the value of `important_var` does not change, the chunk will not be re-executed, even if `auxiliary_var` changes.
+
+I generally set cache.vars='' in my yaml header and only enable caching of specific variables as needed. See the yaml at the top of this document for an example.
+
+## Considerations When Using Caching
+
+While caching can greatly improve efficiency, there are some important considerations to keep in mind:
+
+### Disk Usage
+
+When you cache all variables in a chunk, Quarto writes these variables to disk. For large datasets or numerous variables, this can result in significant disk usage and slow down the rendering process. To avoid this, consider caching only the variables you need using the `cache.vars` option.
+
+### Variable Scope in R
+
+In R, variables have a global scope by default. If you cache all variables in a chunk, they remain accessible in subsequent chunks, which can lead to unintended consequences. For example, you might accidentally use a cached variable downstream without realizing it, leading to errors or unexpected results. By caching only specific variables, you limit this risk and make your code more predictable.
+
+### Handling Large Variables
+
+For very large variables, it is often better not to cache them. Instead, explicitly save them to disk using efficient serialization tools like the `qs2` package. The `qs2` package provides faster read and write speeds compared to base R functions like `saveRDS()`.
+
+**Example:**
+
+```{r save-large-variable}
+# Save a large variable to disk using the qs2 package
+library(qs2)
+large_data <- compute_large_dataset()
+qs_save(large_data, file = "data/large_data.qs2")
+```
+
+Later, you can reload the variable when needed:
+
+```{r load-large-variable}
+# Load the large variable from disk using the qs2 package
+library(qs2)
+large_data <- qs_read("data/large_data.qs2")
+```
+
+By using `qs2`, you can efficiently manage large variables while maintaining clarity and reproducibility in your workflow. Also, you don't have to cache large variables.
+
+## Benefits of Caching
+
+- **Efficiency:** Avoid re-running expensive computations.
+- **Reproducibility:** Ensure consistent results by caching intermediate steps.
+- **Flexibility:** Use `cache.vars` to fine-tune what gets cached.
+
+By leveraging Quarto's caching capabilities, you can streamline your workflow and focus on the analysis rather than waiting for code to re-run unnecessarily.
+
+# Writing Efficient and Readable Code
+
+## Don't Repeat Yourself (DRY)
+
+The DRY principle is central to good programming. If you find yourself copying and pasting code, there's probably a better way. Repetitive code is a breeding ground for errors. A change in one place needs to be manually updated in all other places, which is tedious and error-prone.
+
+### Using Functions to Reduce Repetition
+
+Functions are reusable blocks of code that perform a specific task. They are one of the most powerful tools for reducing repetition.
+
+Let's say you need to normalize your data using three different methods.
+
+**Bad Example:** Copying and pasting the normalization code.
+
+````{r}
+# Normalization method 1
+data_norm1 <- data / sum(data)
+
+# Normalization method 2
+data_norm2 <- data / max(data)
+
+# Normalization method 3
+data_norm3 <- log2(data + 1)
+````
+
+If you find a bug in your normalization logic, you have to fix it in three places.
+
+**Good Example:** Using a function.
+
+````{r}
+normalize_data <- function(x, method = "sum") {
+    if (method == "sum") {
+        return(x / sum(x))
+    } else if (method == "max") {
+        return(x / max(x))
+    } else if (method == "log") {
+        return(log2(x + 1))
+    } else {
+        stop("Invalid normalization method specified.")
+    }
+}
+
+data_norm1 <- normalize_data(data, method = "sum")
+data_norm2 <- normalize_data(data, method = "max")
+data_norm3 <- normalize_data(data, method = "log")
+````
+
+Now, if you need to change the logic, you only have to do it once inside the function.
+
+### Using Loops to Reduce Repetition
+
+Loops are another way to avoid repetition when you need to perform the same action on multiple items, like files or data columns.
+
+**Bad Example:** Manually processing multiple files.
+
+````{r}
+file1_data <- read.csv("data/processed/sample1.csv")
+file1_data$mean <- rowMeans(file1_data)
+
+file2_data <- read.csv("data/processed/sample2.csv")
+file2_data$mean <- rowMeans(file2_data)
+
+file3_data <- read.csv("data/processed/sample3.csv")
+file3_data$mean <- rowMeans(file3_data)
+````
+
+**Good Example:** Using a loop.
+
+````{r}
+file_paths <- c(
+    "data/processed/sample1.csv",
+    "data/processed/sample2.csv",
+    "data/processed/sample3.csv"
+)
+data_list <- list()
+
+for (path in file_paths) {
+    data <- read.csv(path)
+    data$mean <- rowMeans(data)
+    data_list[[path]] <- data
+}
+````
+
+This approach is more scalable. If you have 100 files, you don't need to write 100 blocks of code.
+
+I also tend to use metadata files to keep track of information on all the samples I'm analyzing, then I read in this `sample_info.tsv` file to process the right files instead of writing out something like `file_paths`. If you have more than two or three files, the above example gets cumbersome. This also serves as a single location to store all sample metadata including things like sample groups, nCount_RNA cutoffs, sample species, etc... to use during your processing and analysis.
+
+# Reproducibility and Reliability
+
+## Controlling Randomness
+
+Many bioinformatics analyses involve random processes (e.g., bootstrapping, random sampling, k-means clustering). To make your results reproducible, you must control this randomness.
+
+In R, you can do this using `set.seed()`. This function initializes the random number generator with a specific seed.
+
+**Bad Example:**
+
+```{r}
+# Every time you run this, you'll get a different sample
+sample(1:100, 5)
+```
+
+**Good Example:**
+
+```{r}
+# Setting a seed ensures the "random" sample is the same every time
+set.seed(123)
+sample(1:100, 5)
+```
+
+Always set a seed before any step that involves randomness to ensure your analysis is fully reproducible. You can also set.seed() at the top of your code, though this _does not_ ensure that all downstream code is fully reproducible.
+
+Also, pick one number for your random seed and always use that so it doesn't look like you're fishing for specific results.
+
+```{r}
+set.seed(784387803)
+t.test(sample(1:100, 10), sample(1:100, 10))
+# !!!!!!!! Super significant !!!!!!!!!
+```
+
+
+## Commenting Non-Intuitive Code
+
+Code should be as self-explanatory as possible. However, sometimes you need to implement a complex algorithm or a non-obvious step. In these cases, comments are essential.
+
+**Bad Example:**
+
+````{r}
+# What is this magic number? Why this specific filtering?
+filtered_data <- data[data$p_value < 0.05 & abs(data$log_fold_change) > 1.5, ]
+````
+
+**Good Example:**
+
+````{r}
+# Filter for significantly differentially expressed genes.
+
+# We use a p-value threshold of 0.05, a standard in the field.
+pval_cutoff <- 0.05
+
+# The log fold change threshold of 1.5 is chosen based on previous studies
+# in this biological system to identify biologically meaningful changes.
+min_logfc <- 1.5
+
+filtered_data <-
+    data[data$p_value < pval_cutoff &
+        abs(data$log_fold_change) > min_logfc, ]
+````
+
+## Naming Variables and Functions
+
+Use descriptive names for your variables and functions. It makes your code easier to understand.
+
+**Bad Example:**
+
+````{r}
+x <- read.csv("counts.csv")
+m <- 10
+y <- x[rowSums(x) > m, ]
+z <- log2(y + 1)
+````
+
+What are `x`, `y`, `m` and `z`? This problem gets amplified by long code chunks where the context is lost.
+
+**Good Example:**
+
+````{r}
+raw_counts <- read.csv("counts.csv")
+min_n_counts <- 10
+filtered_counts <- raw_counts[rowSums(raw_counts) > min_n_counts, ]
+log_transformed_counts <- log2(filtered_counts + 1)
+````
+
+The same principle applies to functions. `calculate_fold_change()` is much clearer than `cfc()`.
+
+## Maintaining a Logical Flow
+
+Your code should read like a story, from beginning to end. In a Quarto document, this means arranging your code chunks in the order they should be executed. Avoid jumping back and forth.
+
+## Using a Consistent Coding Style
+
+A consistent coding style makes your code more readable. This includes conventions for spacing, naming, and indentation. For R, a popular style guide is the [Tidyverse style guide](https://style.tidyverse.org/).
+
+**Bad Example:** Inconsistent style.
+
+````{r}
+variable.name <- 1 # Inconsistent assignment operator
+variable_name_2 <- 2 # Inconsistent assignment operator and spacing
+function(x) {
+return(x + 1)
+} # No spacing
+````
+
+**Good Example:** Consistent style.
+
+````{r}
+variable_name <- 1
+another_variable <- 2
+
+my_function <- function(x) {
+    return(x + 1)
+}
+````
+
+Many code editors can automatically format your code to a specific style guide.
+
+Check out {air} for automatic R formatting.
+
+# Avoiding Complex Code Structures
+
+## Avoiding Large Stacks of `if-else` Statements
+
+Large stacks of `if-else` statements can make your code difficult to read, debug, and maintain. Instead, consider alternative approaches such as:
+
+1. **Using a `switch` or `case` statement** (if supported by your programming language):
+   - These are often more concise and easier to follow than multiple `if-else` blocks.
+
+2. **Using a dictionary or lookup table**:
+   - In languages like Python or R, you can use a dictionary or named list to map conditions to actions.
+
+**Bad Example:**
+
+```r
+if (sample == "mouse") {
+    genome_file = "path/to/mouse/genome.fa"
+} else if (sample == "human") {
+    genome_file = "path/to/human/genome.fa"
+} else if (sample == "rat") {
+    genome_file = "path/to/rat/genome.fa"
+} else {
+    stop("Unknown sample type")
+}
+```
+
+**Good Example:** Using a named list in R.
+
+```r
+genome_files <- list(
+    mouse = "path/to/mouse/genome.fa",
+    human = "path/to/human/genome.fa",
+    rat = "path/to/rat/genome.fa"
+)
+
+if (sample %in% names(genome_files)) {
+    genome_file <- genome_files[[sample]]
+} else {
+    stop("Unknown sample type")
+}
+```
+If the named list is really big, use a file to store the mappings and read it into a named list.
+
+* Note how I captured conditions outside my expectation here *
+
+**Bad Example:**
+```python
+if condition1:
+    do_something()
+elif condition2:
+    do_something_else()
+elif condition3:
+    do_another_thing()
+else:
+    do_default()
+```
+
+**Good Example:** Using a dictionary for cleaner logic.
+
+```python
+actions = {
+    "condition1": do_something,
+    "condition2": do_something_else,
+    "condition3": do_another_thing
+}
+
+# Execute the appropriate action
+actions.get(condition, do_default)()
+```
+
+This approach is more scalable and easier to modify.
+
+## Limiting Code Nesting Depth
+
+Deeply nested code (e.g., code with many levels of indentation) is hard to read and debug. It can also make it difficult to understand the overall flow of your program. As a general guideline, try to limit your nesting to **3 levels or fewer**.
+
+### Strategies to Reduce Nesting
+
+**Refactor nested logic into functions:**
+   - Move deeply nested blocks of code into their own functions to improve readability.
+
+**Bad Example:**
+
+```python
+if condition1:
+    for item in items:
+        if condition2:
+            do_something(item)
+```
+
+**Good Example:**
+
+```python
+def process_item(item):
+    if condition2:
+        do_something(item)
+
+if condition1:
+    for item in items:
+        process_item(item)
+```
+
+By keeping your code shallow and modular, you make it easier to read, debug, and maintain. Also, the functions you write can be reused and tested independently.
+
+# Choosing the Right Tool for the Job
+
+While you might have a favorite programming language, it's important to recognize that different languages and tools are designed for different tasks. Forcing yourself to use a single language for everything can lead to inefficient, complicated, and slow code.
+
+"If all you have is a hammer, everything looks like a nail"
+
+In bioinformatics, you'll often find yourself working with a combination of tools.
+
+*   **R**: R is fantastic for statistical analysis, data visualization, and exploratory data analysis. Packages from Bioconductor and CRAN make it a powerhouse for genomics, transcriptomics, and more. If your primary goal is to analyze data and create plots, R is an excellent choice. But, it can be quite slow.
+
+*   **Python**: Python is a general-purpose programming language with a more straightforward syntax for tasks like file manipulation, text processing, and building complex data pipelines. Libraries like `pandas` for data manipulation, `biopython` for sequence analysis, and various machine learning libraries make it very versatile. It's often better for building larger, more complex applications or pipelines.
+
+*   **Bash (The Command Line)**: The command line is unbeatable for file and directory manipulation and for chaining together existing bioinformatics tools. Many standard bioinformatics tools (like `samtools`, `bwa`, `GATK`) are command-line programs. Instead of trying to re-implement file operations in R or Python, a simple `bash` command or script is often more efficient.
+
+*   **Nextflow/Snakemake**: Nextflow and Snakemake are workflow management systems that allow you to write complex data analysis pipelines in a simple and reproducible way. They can orchestrate the execution of scripts written in different languages (e.g., R, Python, Bash) and manage the data flow between them.
+
+### Example: When to use what
+
+Let's say you need to download some data, unzip it, process it with a command-line tool, and then analyze the results.
+
+**Bad Example:** Trying to do everything in R. While possible, it's clunky.
+
+````{r}
+# This is possible, but not ideal. Error handling is harder.
+download.file("url_to_data", "data.tar.gz")
+system("tar -zxvf data.tar.gz")
+system("bwa index reference.fasta")
+system("bwa mem reference.fasta reads.fastq > alignment.sam")
+sam_data <- read.table("alignment.sam", header = FALSE)
+# ... further analysis in R
+````
+
+**Good Example:** Using a workflow that leverages the strengths of each tool. You could use a `bash` script to handle the data preparation and then switch to R for analysis.
+
+A `bash` script (`run_pipeline.sh`):
+```bash
+#!/bin/bash
+
+# Download and decompress data
+wget -O data.tar.gz url_to_data
+tar -zxvf data.tar.gz
+
+# Run alignment
+bwa index reference.fasta
+bwa mem reference.fasta reads.fastq > alignment.sam
+
+# Now, you could run an R script for the analysis
+Rscript analyze_results.R alignment.sam
+```
+
+Then, your R script (`analyze_results.R`) would focus solely on the statistical analysis part. This separation of concerns makes your workflow cleaner, more robust, and easier to debug.
+
+# Version Control with Git
+
+Git is a powerful version control system. It's like "track changes" for your entire project (code, figures, etc).
+
+## Using Git Branches
+
+A key feature of Git is branching. A branch is an independent line of development. You can create a new branch to try out a new idea or analysis approach without affecting your main, stable codebase (the `main` or `master` branch).
+
+If the new idea works, you can merge it into your main branch. If it doesn't, you can simply delete the branch. This keeps your project history clean and ensures the main branch always contains working code.
+
+Don't keep multiple versions of parts of your analyses together so it's obvious what you did.
+
+Don't keep commented out code in the good version of your code. It's fine as a temporary measure while you're working on something, but once you have a working version, remove the commented out code. If you need to refer back to it later, you can always find it in your Git history.
+
+**Workflow:**
+
+1.  **Create a new branch:** `git checkout -b new-analysis-idea`
+2.  **Work on your new code:** Make commits on this branch.
+3.  **If it works, merge it:**
+    *   Switch back to the main branch: `git checkout main`
+    *   Merge the new branch: `git merge new-analysis-idea`
+4.  **If it doesn't work, delete it:** `git branch -d new-analysis-idea`
+
+# Backing Up Your Work
+
+Hardware fails, accidents happen. It's not a matter of *if* you will lose data, but *when*. Regularly backing up your work is essential.
+
+### What to Back Up
+The most important things to back up are the files that cannot be easily recreated. This includes:
+*   Your source code (`scripts/`, `.qmd` files)
+*   Your documentation (`docs/`, `README.md`)
+*   The raw data (which should have its own backup strategy, especially if stored centrally).
+
+### What NOT to Back Up
+A key benefit of a reproducible workflow is that you don't need to back up everything. You should generally **avoid** backing up:
+*   **Intermediate data files (`data/processed/`)**
+*   **Results (`output/`)**
+
+Why? Because these files are generated by your code. Since you have written your code to be reproducible (by controlling randomness and documenting steps), you can always regenerate the exact same output files from your source code and raw data. Not backing up these files saves a significant amount of space and simplifies your backup process.
+
+Using a remote Git repository on a service like GitHub, GitLab, or Bitbucket is one of the best ways to back up your code. Every time you `git push`, you are sending a complete copy of your project's history to a remote server, providing a robust, off-site backup.
+
+# Advanced Topics
+
+## Doing Work in Parallel
+
+Some bioinformatics tasks are computationally intensive. If you have a multi-core processor, you can often speed up your analysis by running tasks in parallel.
+
+In R, the `future` and `furrr` packages provide a user-friendly way to parallelize your code.
+
+**Example:** Applying a function to a list of items in parallel.
+
+````{r}
+library(future)
+library(furrr)
+
+# Set up a parallel backend (use 2 cores)
+plan(multisession, workers = 2)
+
+# A "slow" function
+slow_function <- function(x) {
+    Sys.sleep(1) # Simulate a 1-second computation
+    return(x^2)
+}
+
+# Use future_map to apply the function in parallel
+results <- future_map(1:4, slow_function)
+````
+
+This will be almost twice as fast as running it sequentially on a machine with at least two cores.
+
+Similar techniques can be used in other languages or through job management systems like SLURM for high-performance computing clusters.
+
+"Divide and conquer"
+
+## Compartmentalization of Code
+
+As your analysis grows, you might want to move your functions into separate R or qmd files. This is called compartmentalization. It keeps your main analysis script clean and focused on the high-level workflow.
+
+You can then load these functions into your Quarto document using `source()`.
+
+**`scripts/helper_functions.R` file:**
+
+```r
+# scripts/helper_functions.R
+
+normalize_data <- function(x, method = "sum") {
+  # ... function code from before ...
+}
+
+calculate_fold_change <- function(group1, group2) {
+  # ... code to calculate fold change ...
+}
+```
+
+**In your Quarto document:**
+
+````{r setup}
+# Load all our custom functions
+source("scripts/utils.R")
+````
+
+Or:
+{{< include child_qmds/helper_functions.qmd >}}
+
+````{r analysis}
+# Now we can use the functions directly
+normalized_data <- normalize_data(raw_counts)
+fold_changes <- calculate_fold_change(control_samples, treated_samples)
+````
+
+### Including Child Documents for Large Reports
+
+Just as you can source external scripts for functions, you can also break down a large Quarto report into smaller, more manageable "child" documents. This is extremely useful for complex projects, like a thesis or a multi-part analysis, where having everything in one massive file becomes unwieldy.
+
+You can write different sections of your report in separate `.qmd` files, often organized into a sub-folder, and then include them in a main "parent" document. It is generally good to not use variables from one child document in another to keep the code readable and independent. Instead, save the data off using qs2 or something and read it back in where needed.
+
+**Example Structure:**
+
+```
+my_report/
+├── main_report.qmd
+└── child_qmds/
+    ├── load_raw_data.qmd
+    ├── RNAseq_DE.qmd
+    └── WGS_snv_calling.qmd
+```
+
+**`main_report.qmd` file:**
+
+To include the child documents, you use the `include` shortcode with the correct file path.
+
+```markdown
+---
+title: "My Full Analysis Report"
+---
+
+# Read in the raw data and process it
+
+{{< include child_qmds/load_raw_data.qmd >}}
+
+# Run DE analysis on RNA-seq data
+
+{{< include child_qmds/RNAseq_DE.qmd >}}
+
+# Do SNV calling on WGS data
+
+{{< include child_qmds/WGS_snv_calling.qmd >}}
+```
+
+When you render `main_report.qmd`, Quarto will execute and embed the content from each child document, creating a single, cohesive report. This approach keeps your project organized and makes it easier to work on different sections independently.
+
+## Testing Your Code with Unit Tests
+
+How do you know your functions are working correctly? Unit tests are small pieces of code that test a specific "unit" of your code, like a function.
+
+In R, the `testthat` package is a popular choice for writing unit tests.
+
+**Example test for our `normalize_data` function:**
+
+```r
+# tests/test-normalize.R
+library(testthat)
+
+# Source the function we want to test
+source("../scripts/utils.r")
+
+test_that("Normalization works correctly", {
+  test_data <- c(10, 20, 30, 40)
+
+  # Test sum normalization
+  expect_equal(normalize_data(test_data, method = "sum"), c(0.1, 0.2, 0.3, 0.4))
+
+  # Test max normalization
+  expect_equal(normalize_data(test_data, method = "max"), c(0.25, 0.5, 0.75, 1.0))
+
+  # Test that it throws an error for invalid methods
+  expect_error(normalize_data(test_data, method = "invalid"))
+})
+```
+
+Running these tests regularly ensures that any changes you make to your functions don't break existing functionality.
+
+# Writing Functions That Do One Thing
+
+Functions should be designed to perform a single, well-defined task. This principle, often referred to as the **"Single Responsibility Principle"**, makes your code easier to read, debug, and reuse. A function that tries to do too much becomes difficult to understand and maintain.
+
+**Example of a poorly designed function:**
+
+```r
+process_data <- function(data) {
+  # Load data
+  data <- read.csv(data)
+
+  # Filter data
+  data <- data[data$value > 10, ]
+
+  # Normalize data
+  data <- data / max(data)
+
+  return(data)
+}
+```
+
+This function does multiple things: loading, filtering, and normalizing data. If you need to change one part of the process, you might inadvertently break another part.
+
+**Example of a well-designed function:**
+
+```r
+load_data <- function(filepath) {
+  return(read.csv(filepath))
+}
+
+filter_data <- function(data, threshold) {
+  return(data[data$value > threshold, ])
+}
+
+normalize_data <- function(data) {
+  return(data / max(data))
+}
+```
+
+Each function performs a single task, making it easier to test and reuse independently.
+
+# Compartmentalization and Child Documents
+
+When working on large projects, it's important to break your analysis into smaller, manageable pieces. This is where compartmentalization comes in. Each child document in your Quarto project should focus on a single, conceptually unified part of the analysis, such as data preprocessing, statistical analysis, or visualization.
+
+Be sure to name these documents in a way that makes it easy to understand their purpose and quickly find the code to do a specific part of the analysis.
+
+**Example:**
+
+- `data_preprocessing.qmd`: Handles data cleaning and transformation.
+- `statistical_analysis.qmd`: Contains statistical tests and models.
+- `visualization.qmd`: Focuses on creating plots and figures.
+
+By keeping each document focused, you make your project easier to navigate and maintain. Additionally, this approach allows team members to work on different parts of the analysis simultaneously.
+
+# Sharing Code Across Projects
+
+Writing solid code with good design principles not only improves your current project but also makes it easier to share and reuse code in future projects. Reusable code can save you significant time and effort.
+
+**Key Practices for Reusable Code:**
+
+1. **Single Responsibility Principle:** Write functions that perform a single task and can be easily adapted to different contexts.
+2. **Encapsulation**: The internal implementation of a function should be invisible from outside. This way a function or method can be changed without affecting other parts of the code.
+2. **Generalization:** Write functions that aren't specific to specific samples. Include arguments that allow tailoring to specific use cases.
+3. **Modularity:** Organize your code into logical modules or scripts that can be sourced into other projects.
+4. **Documentation:** Clearly document your functions and scripts so others (and your future self) can understand how to use them.
+
+**Example:**
+
+Suppose you write a function to normalize data in one project. By following good design principles, you can reuse it in another project without modification:
+
+```r
+normalize_data <- function(data, method = "sum") {
+  if (method == "sum") {
+    return(data / sum(data))
+  } else if (method == "max") {
+    return(data / max(data))
+  } else {
+    stop("Invalid normalization method specified.")
+  }
+}
+```
+
+By building a library of reusable functions and scripts, you can speed up your work and ensure consistency across projects.
+
+### Using `dependson` to Create Dependency Trees
+
+Quarto allows you to specify dependencies between code chunks using the `dependson` option. This creates a dependency tree, ensuring that chunks are only re-executed when their dependencies change. This is particularly useful for managing complex workflows with multiple interdependent steps.
+
+**Example:**
+
+```{r load-data}
+#| cache: true
+
+# Load the data
+raw_data <- read.csv("data/raw_data.csv")
+```
+
+```{r process-data}
+#| cache: true
+#| dependson: "load-data"
+
+# Process the data
+processed_data <- raw_data[raw_data$value > 10, ]
+```
+
+```{r analyze-data}
+#| cache: true
+#| dependson: "process-data"
+
+# Analyze the processed data
+analysis_results <- summary(processed_data)
+```
+
+In this example:
+- The `process-data` chunk depends on the `load-data` chunk.
+- The `analyze-data` chunk depends on the `process-data` chunk.
+
+If the `load-data` chunk changes, both `process-data` and `analyze-data` will be re-executed. If only `process-data` changes, then only `analyze-data` will be re-executed.
+
+### Benefits of Using `dependson`
+
+- **Efficiency:** Avoids unnecessary re-execution of unrelated chunks.
+- **Clarity:** Makes the relationships between chunks explicit, improving the readability of your workflow.
+- **Reproducibility:** Ensures that changes propagate correctly through the analysis pipeline.
+
+By leveraging `dependson`, you can create robust and efficient workflows that are easy to maintain and debug.
+
+# Code Reviews
+
+Code reviews are an essential part of collaborative programming. They help ensure code quality, maintainability, and adherence to best practices. By having another set of eyes on your code, you can catch potential issues early and learn from others' perspectives.
+
+## Benefits of Code Reviews
+
+- **Improved Code Quality:** Identify bugs, inefficiencies, and areas for improvement.
+- **Knowledge Sharing:** Share expertise and learn from team members.
+- **Consistency:** Ensure adherence to coding standards and best practices.
+- **Collaboration:** Foster a culture of teamwork and open communication.
+
+## Using AI for Code Reviews
+
+AI tools like GitHub Copilot can assist in code reviews by providing suggestions, identifying potential issues, and offering improvements. While AI cannot replace human reviewers, it can be a valuable supplement to the review process. It can also be easier for people to accept criticism from an AI than from a human. **Be skeptical of anything you get from AI, of course.**
+
+Copilot actually has a specific function built in to do code review. You can either right click a document and select `Copilot -> Review and Comment` or hit control/command + shift + P and search for it in VSCode.
+
+### Example Prompt for AI Code Reviews
+
+"Review this code for readability, maintainability, and adherence to coding standards (e.g., PEP 8 for Python).
+
+Identify potential bugs, edge cases, performance bottlenecks, and security vulnerabilities.
+
+Suggest improvements to comments, documentation, and overall code quality.
+
+Provide output as a bullet list with the section of the code that needs to be changed and suggestions on how best to improve it.
+
+Break the output into sections by type of issue and severity."
+
+### Example Workflow with AI
+
+1. **Initial Review:** Use AI to perform a preliminary review of your code. Incorporate its suggestions where appropriate.
+2. **Human Review:** Share the code with a team member for a more nuanced review.
+3. **Iterate:** Address feedback from both AI and human reviewers, and refine your code.
+
+By combining AI tools with traditional code reviews, you can enhance the quality and efficiency of your development process.
