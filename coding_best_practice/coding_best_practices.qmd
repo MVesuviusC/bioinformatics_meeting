@@ -657,6 +657,14 @@ slow_function <- function(x) {
 
 # Use future_map to apply the function in parallel
 results <- future_map(1:4, slow_function)
+
+# Can also use mclapply from the parallel package
+parallel::mclapply(
+    1:10,
+    function(x) {
+        print(x^2)
+    }
+)
 ````
 
 This will be almost twice as fast as running it sequentially on a machine with at least two cores.
