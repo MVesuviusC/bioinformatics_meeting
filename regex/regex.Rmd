@@ -1,0 +1,356 @@
+---
+title: "Regex Intro"
+author: "Matt Cannon"
+date: "09-17-2025"
+output: pdf_document
+---
+
+# Introduction
+
+Regular expressions (regex) are powerful tools for pattern matching and text manipulation. They allow you to search, extract, and replace strings based on complex patterns. This document introduces the basics of regex in R, provides practical examples, and explains how to use regex for data analysis tasks.
+
+---
+
+# Regular expressions
+
+Extreme pattern matching
+
+
+## What is a Regular Expression?
+
+A regular expression is a sequence of characters that defines a search pattern. Regex is commonly used for string searching and manipulation, such as validating input, extracting information, and performing complex replacements.
+
+Below are some of the most common regex symbols and their meanings:
+
+-   `.`            : Matches any character except a newline
+-   `*`            : Matches the previous character zero or more times
+-   `+`            : Matches the previous character one or more times
+-   `[]`           : Matches any one character inside the brackets
+-   `^`            : Matches the start of a string
+-   `$`            : Matches the end of a string
+-   `\\`           : Escapes a special character
+-   `()`           : Captures the matched group
+-   `(?:)`         : Non-capturing group
+-   `{4}`          : Matches exactly four of the preceding character
+-   `{4,6}`        : Matches four, five, or six of the preceding character
+-   `?`            : Makes the preceding quantifier non-greedy
+-   `\d`           : Matches any digit
+-   `\w`           : Matches any alphanumeric character
+-   `\n`           : Matches a newline
+-   `\t`           : Matches a tab
+-   `\r`           : Matches a carriage return
+-   `|`            : Acts as an OR operator
+-   `(?=pattern)`  : Positive look-ahead
+-   `(?<=pattern)` : Positive look-behind
+-   `(?!pattern)`  : Negative look-ahead
+-   `(?<!pattern)` : Negative look-behind
+
+---
+
+```{r libraries, cache=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = TRUE,
+                      cache.vars = "")
+library(tidyverse)
+```
+
+---
+
+# How to Use This Document
+
+This document is organized into sections that introduce regex concepts, provide code examples, and demonstrate practical applications in R. Each example is annotated to help you understand how the regex pattern works and what the expected output is.
+
+---
+
+# Basic examples
+
+Below are some basic examples of regex usage in R. Each example demonstrates a specific regex concept and how it can be applied to manipulate strings.
+
+##   . means anything
+```{r}
+str_remove_all("Ball-Hall-Tall", ".a")
+```
+*Explanation*: The pattern `.a` matches any character followed by the letter 'a'. This removes all such occurrences from the string.
+
+##   + is previous thing one or more times
+```{r}
+str_remove_all("Ball-Hall-Tall", "l+")
+```
+*Explanation*: The pattern `l+` matches one or more consecutive 'l' characters. This removes all runs of 'l' from the string.
+
+##   * is the precedding thing zero or more times
+```{r}
+str_remove_all("Ball-Hall-Tall", "Z*all")
+```
+
+*Explanation*: The pattern `Z*all` matches zero or more 'Z' characters followed by 'all'. Since 'Z' is not present, it matches just 'all'.
+
+##   use [] to make a group of possibilities (single characters)
+```{r}
+str_remove_all("Ball-Hall-Tall", "[BHTQ]all-")
+#[A-Za-z0-9]
+```
+*Explanation*: The pattern `[BHTQ]all-` matches 'Ball-', 'Hall-', 'Tall-', or 'Qall-' and removes them. Square brackets define a set of possible characters.
+
+##   use a hat ^ to mark the start of the string
+```{r}
+str_remove_all("Ball-Hall-Tall", "^.all-")
+```
+*Explanation*: The pattern `^.all-` matches any character followed by 'all-' at the start of the string.
+
+##   use $ to mark end of the string
+```{r}
+str_remove_all("Ball-Hall-Tall", ".all$")
+```
+*Explanation*: The pattern `.all$` matches any character followed by 'all' at the end of the string.
+
+##   special characters need escapes \ - sometimes two
+```{r}
+str_replace_all("Ball()Hall()Tall", "()", "___REPLACED___")
+    # all instances of nothing "()" replaced
+
+str_replace_all("Ball()Hall()Tall", "\\(\\)", "___REPLACED___")
+```
+*Explanation*: Parentheses are special characters in regex. To match literal parentheses, you need to escape them with `\\`.
+
+##   You can capture parts of a regex match with ()
+###   Specify how many repeats with {x}
+```{r}
+str_match("123-456-7890", "^(\\d{3})-(\\d{3})")
+area_code <- str_match("123-456-7890", "^(\\d{3})-")[2]
+area_code
+```
+*Explanation*: Parentheses capture groups of characters. `{3}` specifies exactly three characters. This extracts the area code from a phone number.
+
+##   Matches are "greedy" by default
+###   Rein it in with ?
+```{r}
+str_match("123-456-7890", "^.+-")
+str_match("123-456-7890", "^.+?-")
+```
+*Explanation*: By default, `.+` matches as much as possible (greedy). Adding `?` makes it non-greedy, matching as little as possible.
+
+##   Look arounds let you match without keeping parts of the match
+Also allows for easier negative matches
+(?=stuff)
+(?>stuff)
+(?=!stuff)
+(?<!stuff)
+```{r}
+str_match("123-456-7890", "-\\d{3}-")
+str_match("123-456-7890", "(?<=-)\\d{3}(?=-)")
+
+str_match("123-456-7890", "(?<!-)\\d{3}")
+```
+*Explanation*: Lookarounds allow you to match a pattern only if it is (or isn't) preceded or followed by another pattern, without including that pattern in the result.
+
+#   They also make negative matches easier
+Match everything but one condition
+```{r}
+str_match_all(
+    "Ball!_Hall!_Tall!_Fall?_Call!_Gall!_Mall!_Pall!_Wall!_Yall!",
+    "([BHTCGMPWY]all.)"
+)
+
+str_match_all(
+    "Ball!_Hall!_Tall!_Fall?_Call!_Gall!_Mall!_Pall!_Wall!_Yall!",
+    "([!F]all.)"
+)
+
+str_match_all(
+    "Ball!_Hall!_Tall!_Fall?_Call!_Gall!_Mall!_Pall!_Wall!_Yall!",
+    "(.(?<!F)all.)"
+)
+```
+*Explanation*: These examples show how to match all words ending in 'all' except those starting with 'F', using character classes and negative lookbehind.
+
+
+# Find a set of genes using *regex*!
+Lets find out what chromosome CD79A, CD79B and CD7 are on
+
+---
+
+# Practical Example: Gene Filtering with Regex
+
+In bioinformatics, regex can be used to filter gene names and extract relevant information from large datasets. The following examples demonstrate how to use regex to find specific genes and manipulate gene lists.
+
+### Get data.... using *regex*!
+```{r refData}
+read_tsv(
+    "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/hg38.ncbiRefSeq.gtf.gz",
+    col_names = FALSE,
+    show_col_types = FALSE,
+    n_max = 20
+) %>%
+    filter(X3 == "transcript") %>%
+    select(X1, X9)
+
+read_tsv(
+    "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/hg38.ncbiRefSeq.gtf.gz",
+    col_names = FALSE,
+    show_col_types = FALSE,
+    n_max = 20
+) %>%
+    filter(X3 == "transcript") %>%
+    select(X1, X9) %>%
+    mutate(X9 = str_remove(X9, "\\\";.+"))
+
+read_tsv(
+    "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/hg38.ncbiRefSeq.gtf.gz",
+    col_names = FALSE,
+    show_col_types = FALSE,
+    n_max = 20
+) %>%
+    filter(X3 == "transcript") %>%
+    select(X1, X9) %>%
+    mutate(X9 = str_remove(X9, "\\\";.+") %>%
+             str_remove(".+\""))
+
+gene_list <-
+    read_tsv(
+        "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/hg38.ncbiRefSeq.gtf.gz",
+        col_names = FALSE,
+        show_col_types = FALSE
+    ) %>%
+    filter(X3 == "transcript") %>%
+    select(X1, X9) %>%
+    mutate(X9 = str_remove(X9, "\\\";.+") %>%
+             str_remove(".+\"")) %>%
+    rename(chr = X1,
+           gene = X9) %>%
+    distinct()
+```
+*Explanation*: These code chunks show how to read gene data from a remote file, filter for transcripts, and clean up gene names using regex functions in R.
+
+### Filter down to just target genes..... using *regex*!
+```{r}
+head(gene_list)
+
+gene_list[grep("CD7*", gene_list$gene), ]
+
+# What???? Why?
+
+# Lets see what we have when we just search for CD7
+gene_list[grep("CD7", gene_list$gene), ]
+
+# Lets make sure the gene starts with CD7 by putting a hat on it
+gene_list[grep("^CD7", gene_list$gene), ]
+
+# Specify that it ends with A or B
+gene_list[grep("^CD7.+[AB]$", gene_list$gene), ]
+
+# But we also want it to include CD7
+
+# Lets get a bit more complex
+# Add 9* to let the match have either 9 or nothing followed by
+# Either A or B or nothing followed by
+# The end of the string "$"
+gene_list[grep("^CD79*[AB]*$", gene_list$gene), ]
+
+# More explicit
+# Technically, "CD799B would match by the previous regex
+gene_list[grep(
+    "(^CD7{1}[AB]{0,1}$)|(^CD79{1}[AB]{0,1}$)",
+    gene_list$gene
+), ]
+
+#
+gene_list[grep("^CD79*[AB]*$", gene_list$gene), ]
+
+listStuff <- c(rownames(mtcars), 'ugly$*+')
+
+listStuff[grep(pattern = ".*\\+.*", listStuff)]
+```
+*Explanation*: These examples show how to use regex to filter gene names based on specific patterns, such as genes starting with 'CD7' or ending with 'A' or 'B'. Comments explain why certain patterns work or don't work as expected.
+
+
+##    R escapes can seem a bit goofy (it's all much better in Perl, naturally)
+Lets try to print \" to the terminal
+
+Special characters need to be escaped:
+    [$&+,:;=?@#|'"<>.-^*()%!]
+
+```{r}
+message("\"")
+```
+
+You can use r"(stuff here)" to make a "raw" string, where the text is treated as just text
+```{r, error=TRUE}
+message(r"(\")")
+```
+
+```{r}
+message("\\\"")
+```
+
+            escape \           escape "
+message("   \\                 \"                ")
+
+*Explanation*: Printing special characters in R requires escaping them with backslashes. The examples show different ways to print a double quote character.
+
+
+### R tries to interpret backslashes followed by a character as a special character
+    \t
+    \n
+    \r
+    \w
+    \d
+
+##   So you sometimes need to escape your escape
+
+```{r}
+string <- "/[()()]\'\t$#&|"
+
+string
+```
+*Explanation*: When working with strings containing special characters, you may need to escape backslashes to prevent R from interpreting them as escape sequences.
+
+## want to replace \t$ with ____FIXED____
+```{r, error=TRUE}
+str_replace(string, "\t\$", "____FIXED____")
+# Here R is trying to interpret \$ as a special character like \t
+
+# Escape the backslash
+str_replace(string, "\t\\$", "____FIXED____")
+
+```
+
+*Explanation*: To match a literal dollar sign after a tab character, you need to escape the backslash in the regex pattern.
+
+## Special character list shamelessly stolen from https://cran.r-project.org/web/packages/stringr/vignettes/regular-expressions.html
+There are a number of pre-built classes that you can use inside []:
+
+    [:punct:]: punctuation
+    [:alpha:]: letters
+    [:lower:]: lowercase letters
+    [:upper:]: upperclass letters
+    [:digit:]: digits
+    [:xdigit:]: hex digits
+    [:alnum:]: letters and numbers
+    [:cntrl:]: control characters
+    [:graph:]: letters, numbers, and punctuation
+    [:print:]: letters, numbers, punctuation, and whitespace
+    [:space:]: space characters (basically equivalent to \s)
+    [:blank:]: space and tab
+
+```{r}
+str_replace(string, "[:cntrl:]", "_replaced_")
+
+str_remove_all(
+    "TrEeS C@NN0T gA1N exPER13NCe dO1NG R3G3X",
+    "[[:upper:][:space:][:digit:][:punct:]]"
+)
+```
+
+*Explanation*: R provides several built-in character classes for use in regex patterns. These classes make it easier to match groups of related characters, such as digits, letters, or punctuation.
+
+
+
+## Regex can get complex....
+http://www.ex-parrot.com/~pdw/Mail-RFC822-Address.html
+
+---
+
+# Conclusion
+
+Regular expressions are a versatile tool for working with text data in R. With practice, you can use regex to solve a wide range of data cleaning, extraction, and validation problems. For more advanced patterns and real-world examples, see the resources linked above.
