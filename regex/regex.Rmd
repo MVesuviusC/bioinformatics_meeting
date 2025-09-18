@@ -26,6 +26,7 @@ Below are some of the most common regex symbols and their meanings:
 -   `*`            : Matches the previous character zero or more times
 -   `+`            : Matches the previous character one or more times
 -   `[]`           : Matches any one character inside the brackets
+    - `[^characters] : Negative matching of any character in group
 -   `^`            : Matches the start of a string
 -   `$`            : Matches the end of a string
 -   `\\`           : Escapes a special character
@@ -80,7 +81,7 @@ str_remove_all("Ball-Hall-Tall", "l+")
 ```
 *Explanation*: The pattern `l+` matches one or more consecutive 'l' characters. This removes all runs of 'l' from the string.
 
-##   * is the precedding thing zero or more times
+##   * is the preceeding thing zero or more times
 ```{r}
 str_remove_all("Ball-Hall-Tall", "Z*all")
 ```
@@ -89,7 +90,7 @@ str_remove_all("Ball-Hall-Tall", "Z*all")
 
 ##   use [] to make a group of possibilities (single characters)
 ```{r}
-str_remove_all("Ball-Hall-Tall", "[BHTQ]all-")
+str_remove_all("Ball-Zall-Tall", "[BHTQ]all-")
 #[A-Za-z0-9]
 ```
 *Explanation*: The pattern `[BHTQ]all-` matches 'Ball-', 'Hall-', 'Tall-', or 'Qall-' and removes them. Square brackets define a set of possible characters.
@@ -108,7 +109,9 @@ str_remove_all("Ball-Hall-Tall", ".all$")
 
 ##   special characters need escapes \ - sometimes two
 ```{r}
-str_replace_all("Ball()Hall()Tall", "()", "___REPLACED___")
+str_replace_all("Ball.Hall.Tall", "\\.", "___REPLACED___")
+
+str_replace_all("Ball[]Hall[]Tall", "\\[\\]", "___REPLACED___")
     # all instances of nothing "()" replaced
 
 str_replace_all("Ball()Hall()Tall", "\\(\\)", "___REPLACED___")
@@ -134,9 +137,9 @@ str_match("123-456-7890", "^.+?-")
 
 ##   Look arounds let you match without keeping parts of the match
 Also allows for easier negative matches
+(?<=stuff)
 (?=stuff)
-(?>stuff)
-(?=!stuff)
+(?!stuff)
 (?<!stuff)
 ```{r}
 str_match("123-456-7890", "-\\d{3}-")
@@ -156,7 +159,7 @@ str_match_all(
 
 str_match_all(
     "Ball!_Hall!_Tall!_Fall?_Call!_Gall!_Mall!_Pall!_Wall!_Yall!",
-    "([!F]all.)"
+    "([^F]all)"
 )
 
 str_match_all(
