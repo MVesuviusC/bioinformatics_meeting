@@ -1,0 +1,8 @@
+# Gene expression counts for 5 genes across 4 samples
+Gene,Sample1,Sample2,Sample3,Sample4
+GeneA,120,135,150,160
+GeneB,80,90,97,95
+GeneC,300,280,310,290
+GeneD,45,55,50,60
+GeneE,500,480,520,510
+
