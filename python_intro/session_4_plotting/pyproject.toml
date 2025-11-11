@@ -1,0 +1,13 @@
+[project]
+name = "plotting_unit"
+version = "0.1.0"
+dependencies = [
+    "pandas",
+    "numpy",
+    "matplotlib",
+    "seaborn",
+    "colorcet>=3.1.0",
+    "ipykernel>=6.30.1",
+    "scikit-learn>=1.7.2",
+    "fastcluster>=1.3.0",
+]
