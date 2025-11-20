@@ -1,0 +1,41 @@
+
+#you can install uv into ~/.local/bin for your personal use (recommended) with this command 
+#(https://docs.astral.sh/uv/getting-started/installation/#installation-methods)
+#
+#curl -LsSf https://astral.sh/uv/install.sh | sh
+
+uv init -p 3.13
+
+#pyproject.toml
+#
+#[project]
+#name = "python-intro"
+#version = "0.1.0"
+#dependecies = []
+
+source .venv/bin/activate
+
+uv add -r requirements.txt
+
+#pyproject.toml
+#
+#[project]
+#name = "python-intro"
+#version = "0.1.0"
+#dependecies = [
+#  "matplotlib>={current_ver}",
+#  "pandas>={current_ver}",
+#  "numpy>={current_ver}",
+#]
+
+uv add seaborn
+
+uv remove seaborn
+
+deactivate
+
+#environment can be reproduced from pyproject.toml and uv.lock
+#frozen option prevents packages from being updated even if allowed
+#uv sync --frozen
+
+rm -r .venv

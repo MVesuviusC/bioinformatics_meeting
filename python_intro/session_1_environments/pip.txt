@@ -1,0 +1,23 @@
+
+#if on franklin
+ml purge
+ml GCCcore/13.3.0 Python/3.12.3
+
+vim requirements.txt
+# matplotlib
+# pandas
+# numpy
+
+python -m venv .venv
+
+source .venv/bin/activate
+
+pip install -r requirments.txt
+
+pip install seaborn
+
+pip remove seaborn
+
+deactivate
+
+rm -r .venv

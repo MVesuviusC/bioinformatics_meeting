@@ -1,0 +1,42 @@
+#must have already run conda init {SHELL} and restarted your shell or run source ~/.{SHELL}rc
+
+#recommended setting but not strictly required but recommended for speed and reproducability
+conda config --set channel_priority strict
+
+vim env.yaml
+#channels:
+#  - conda-forge
+#  - bioconda
+#  - nodefaults
+#dependencies:
+#  - python>=3.13
+#  - pip
+#  - matplotlib
+#  - pandas
+#  - numpy
+#  - pip:
+#    - colorcet
+
+conda env create -n python-intro -f env.yaml
+
+conda activate python-intro
+
+conda install seaborn
+
+conda remove seaborn
+
+conda deactivate
+
+conda env export --from-history -n python-intro > share.yaml
+
+#name: python-intro
+#channels:
+#  - conda-forge
+#  - bioconda
+#dependencies:
+#  - python>=3.13
+#  - pip
+#  ...
+#prefix: /home/gdtheisenlab/jws009/.conda/envs/python-intro
+
+conda env remove -n python-intro
