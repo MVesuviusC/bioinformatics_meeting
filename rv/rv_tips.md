@@ -39,7 +39,7 @@ Use `rv sync` to install everything specified in the rproject.toml file. This wi
 Failed to load config at `.` likely means a syntax error in rproject.toml
 
 # Making sure your environment is reproducible
-make sure to add these files to your github:
+make sure to add these files to your GitHub:
 - rv/scripts/activate.R
 - rv/scripts/rvr.R
 - rv/.gitignore
@@ -61,22 +61,12 @@ Delete these files and folders:
 - rv.lock
 - rproject.toml
 
+# VSCode specific tips
+- If the version of R you have in your path by default does not match the version you're using in your rproject.toml file, you will end up with error messages about mismatched R versions whenever you try to hover over a function to see its documentation. If you don't want to change your default R version, you can specify a workspace specific R version in the .vscode/settings.json file. You can set this by going to the extension settings for R and picking the workspace tab and changing the path to the R executable. This will ensure that the R extension uses the correct version of R for your project and you won't get error messages about mismatched versions when hovering over functions.
 
+For example, in ./.vscode/settings.json, you could have:
 
-
-
-
-
-
-
-
-
-
-
-
-    { name = "Matrix", git = "https://github.com/cran/Matrix", tag = "1.6-5" },
-    "tidyverse",
-    { name = "ggrepel", git = "https://github.com/slowkow/ggrepel", tag = "0.9.6"},
-    "Seurat",
-    "SeuratObject",
-    "SingleCellExperiment",
+{
+  "r.rterm.linux": "/export/apps/opt/R/4.5.0-foss-2020a/bin/R",
+  "r.rpath.linux" : "/export/apps/opt/R/4.5.0-foss-2020a/bin/R"
+}
