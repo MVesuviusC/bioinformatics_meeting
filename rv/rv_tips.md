@@ -13,6 +13,17 @@ This creates files and folders:
 - rv.lock              File to lock the versions of packages you have installed
 - rproject.toml        File to specify the packages you want to use in your project
 
+Add repositories to the rproject.toml file such as:
+
+    { alias = "CRAN", url = "https://cran.rstudio.com/" },
+    { alias = "PPM", url = "https://packagemanager.posit.co/cran/latest" },
+    { alias = "bioconductor", url = "https://bioconductor.org/packages/3.22/bioc" },
+    { alias = "BioCann", url = "https://bioconductor.org/packages/3.22/data/annotation"},
+    { alias = "BioCexp", url = "https://bioconductor.org/packages/3.22/data/experiment" },
+    { alias = "BioCworkflows", url = "https://bioconductor.org/packages/3.22/workflows"},
+
+I don't know why these aren't pre-populated.
+
 # Adding packages
 You can do this in two ways. The preferred method is to edit the rproject.toml file and add the packages you want to use. This allows the dependencies to be resolved all at once and ensures that you have compatible versions of all packages. 
 
