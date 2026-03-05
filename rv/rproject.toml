@@ -1,0 +1,36 @@
+[project]
+name = "rv"
+r_version = "4.4"
+
+# A list of repositories to fetch packages from. Order matters: we will try to get a package from each repository in order.
+# The alias is only used in this file if you want to specifically require a dependency to come from a certain repository.
+repositories = [
+    { alias = "CRAN", url = "https://cran.rstudio.com/" },
+    { alias = "PPM", url = "https://packagemanager.posit.co/cran/latest" },
+    { alias = "bioconductor", url = "https://bioconductor.org/packages/3.22/bioc" },
+    { alias = "BioCann", url = "https://bioconductor.org/packages/3.22/data/annotation"},
+    { alias = "BioCexp", url = "https://bioconductor.org/packages/3.22/data/experiment" },
+    { alias = "BioCworkflows", url = "https://bioconductor.org/packages/3.22/workflows"},
+]
+
+# A list of packages to install and any additional configuration
+# Examples:
+#     "tidyverse",
+#     { name = "ggrepel", git = "https://github.com/slowkow/ggrepel", tag = "0.9.6"},
+#     "Seurat",
+#     { name = "nichenetr", git = "https://github.com/saeyslab/nichenetr", tag = "v2.2.0" },
+#     "ComplexHeatmap",
+#     { name = "qs", git = "https://github.com/qsbase/qs", branch = "master" },
+#     { name = "rrrSingleCellUtils", git = "https://github.com/kidcancerlab/rrrSingleCellUtils", tag = "v0.21.0" },
+#     "celldex",
+#     "qs2",
+#     "hdf5r",
+#     "SingleCellExperiment",
+#     "scrapper",
+#     "rmarkdown",
+#     "jsonlite",
+dependencies = [
+  "tidyverse",
+  { name = "ggrepel", git = "https://github.com/slowkow/ggrepel", tag = "0.9.6"},
+  "Seurat",
+]
