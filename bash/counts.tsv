@@ -1,0 +1,5 @@
+feature	sample	count
+geneA	old-name_A	15
+geneB	old-name_A	7
+geneA	old-name_B	23
+geneB	old-name_B	12

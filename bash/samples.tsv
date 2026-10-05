@@ -1,0 +1,4 @@
+sample_id	condition	status
+old-name_A	control	passed
+old-name_B	treated	passed
+old-name_C	control	needs_review

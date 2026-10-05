@@ -1,0 +1,818 @@
+---
+title: "An Introduction to Advanced Bash Scripting"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+execute:
+  eval: false
+  echo: true
+---
+
+# Introduction
+
+Bash is both a command-line shell and a scripting language. Even if you mostly
+use it to launch tools, a little scripting can make repetitive work safer and
+more reproducible. This lesson builds on basic command-line familiarity and
+covers common techniques for working with file names, collections, and batches
+of commands.
+
+# Formatting long commands
+
+A backslash (`\`) at the very end of a line tells Bash that the command
+continues on the next line. This can make long commands easier to read,
+especially when they have several options or arguments. Put one logical
+argument or option on each continued line and indent continuation lines
+consistently.
+
+The backslash must be the final character on the line: trailing spaces after
+it can prevent the continuation from working as intended. Do not put a comment
+after a continuation backslash, because the comment consumes the next line.
+
+```{bash}
+find fastq \
+    -type f \
+    -name '*.fastq.gz' \
+    -print0 \
+  | wc -l
+```
+
+For commands where options and arguments can be listed separately, this style
+also makes it easier to add or remove an option without changing the rest of
+the command.
+
+```{bash}
+tar -czvf \
+    project-files.tar.gz \
+    results/ \
+    scripts/ \
+    README.md
+```
+
+# Variables and text expansion
+
+## Scalar variables
+
+A scalar variable stores one value, such as a sample name or path. Assignments
+*must not have spaces around `=`*. Use `$name` or, preferably in longer
+expressions, `${name}` to expand a variable.
+
+Single and double quotes have different meanings in Bash. **Double quotes**
+preserve the value as one argument while still allowing variable and command
+substitution. **Single quotes** preserve everything between them literally:
+variables are not expanded. The quote marks themselves are syntax and are not
+included in the resulting value. In most scripts, use double quotes around
+variable expansions so spaces and wildcard characters in a value do not get
+treated as argument separators or filename patterns.
+
+```{bash}
+sample="patient 01"
+double_quoted="Sample: $sample"
+single_quoted='Sample: $sample'
+input_file="data/${sample}/reads_R1.fastq.gz"
+
+printf 'Sample: %s\n' "$sample"
+printf 'Double quotes: %s\n' "$double_quoted"
+printf 'Single quotes: %s\n' "$single_quoted"
+printf 'Input:  %s\n' "$input_file"
+```
+
+Prefer `printf` over `echo` in scripts when you need predictable handling of
+backslashes or option-like text. The `printf` format string above is
+single-quoted because its `%s` and `\n` should be interpreted by `printf`,
+while the values passed to it are double-quoted so each remains a single
+argument.
+
+## Arrays
+
+An indexed array holds an ordered list of values, unlike a scalar variable,
+which holds one value. Arrays are useful when a script needs to process a
+known set of samples or files. Declare array items separated by spaces; use
+`"${array[@]}"` when passing all items so that each item remains a distinct
+argument, even if it contains spaces.
+
+```{bash}
+project="rnaseq-study"                 # one scalar value
+samples=("sample 01" "sample-02" "sample-03")
+
+printf 'Project: %s\n' "$project"
+printf 'Number of samples: %s\n' "${#samples[@]}"
+printf 'First sample: %s\n' "${samples[0]}"
+printf 'Samples: %s\n' "${samples[@]}"
+```
+
+Bash array indices start at zero. `${#samples[@]}` gives the number of array
+items; `${samples[0]}` accesses the first. Avoid writing `${samples}` when you
+mean the whole array: use `"${samples[@]}"` to preserve item boundaries.
+
+## Command substitution
+
+Command substitution runs a command and replaces `$(...)` with the command's
+output. This lets a script save a result for later use. It is often used to
+count files, capture a date, or save the output of a short query. Quote the
+result when using it so spaces in the value remain intact.
+
+```{bash}
+sample_count=$(wc -l < bash/samples.tsv)
+today=$(date +%F)
+
+printf 'Lines in sample table: %s\n' "$sample_count"
+printf 'Date: %s\n' "$today"
+```
+
+If a command prints several simple, whitespace-separated values, wrapping its
+command substitution in parentheses assigns those words to an indexed array.
+For example, this reads the sample IDs from the first column of the TSV:
+
+```{bash}
+sample_ids=( $(awk -F '\t' 'NR > 1 { print $1 }' bash/samples.tsv) )
+
+printf 'Found %s samples\n' "${#sample_ids[@]}"
+printf 'Sample: %s\n' "${sample_ids[@]}"
+```
+
+This form uses Bash word splitting and filename expansion on the command's
+output. Use it only when you know the output contains simple values without
+spaces or wildcard characters; it is not safe for arbitrary file paths. For
+line-oriented output that may contain spaces, use `mapfile` to preserve each
+line as one array item:
+
+```{bash}
+mapfile -t sample_ids < <(awk -F '\t' 'NR > 1 { print $1 }' bash/samples.tsv)
+```
+
+Command substitution removes trailing newline characters from the output.
+Avoid using it to collect arbitrary file paths into one string: splitting that
+string later can break names containing spaces or other special characters.
+Use an array or a NUL-delimited loop for lists of files.
+
+## Removing parts of a value with parameter expansion
+
+Bash can remove matching text from the beginning or end of a variable without
+starting another program. The pattern is a shell glob pattern, not a regular
+expression. For a suffix, `%` removes the *shortest* matching ending and `%%`
+removes the *longest* matching ending. For a prefix, `#` removes the shortest
+match and `##` the longest.
+
+For example, `${my_var%%.txt}` removes a `.txt` suffix if it is present. Since
+that pattern is exactly `.txt`, it does not remove other text before the suffix.
+Use a wildcard when the part to remove can vary.
+
+```{bash}
+my_var="long/path/to/results/sample.counts.txt.txt"
+
+printf '%s\n' "${my_var%%.txt*}"    # long/path/to/results/sample.counts
+printf '%s\n' "${my_var%.txt*}"     # long/path/to/results/sample.counts.txt
+printf '%s\n' "${my_var%.*}"        # long/path/to/results/sample.counts.txt
+printf '%s\n' "${my_var%%.*}"       # long/path/to/results/sample
+printf '%s\n' "${my_var##*/}"       # sample.counts.txt.txt
+printf '%s\n' "${my_var#*/}"        # path/to/results/sample.counts.txt.txt
+```
+
+This is handy for making output names from input names. Consider which suffix
+you want to strip: a compressed FASTQ file may have a name ending in
+`.fastq.gz`, so `${file%.gz}` and `${file%.*}` produce different results.
+
+```{bash}
+file="reads/sample_R1.fastq.gz"
+uncompressed_name="${file%.gz}"
+sample_name="${file##*/}"
+sample_name="${sample_name%%_*}"
+
+printf 'Uncompressed name: %s\n' "$uncompressed_name"
+printf 'Sample name:       %s\n' "$sample_name"
+```
+
+Bash also supports pattern substitution with `${variable/pattern/replacement}`.
+The pattern uses shell glob syntax, not a regular expression. A single `/`
+replaces the first match; `//` replaces every match. This is useful for
+changing text inside a value, while prefix/suffix removal is usually clearer
+when changing a file extension.
+
+```{bash}
+my_var="results/sample.txt"
+first_replacement="${my_var/txt/tsv}"
+
+printf '%s\n' "$first_replacement"  # results/sample.tsv
+
+text="txt and txt"
+all_replacements="${text//txt/tsv}"
+printf '%s\n' "$all_replacements"   # tsv and tsv
+
+output_file="${my_var%.txt}.tsv"
+printf '%s\n' "$output_file"        # results/sample.tsv
+```
+
+In `${my_var/txt/tsv}`, Bash searches for the first substring matching `txt`.
+Because that pattern can match in the middle of a longer string, stripping a
+known suffix and appending a new one (as in `output_file`) is often more
+precise for file extensions.
+
+# The `PATH` environment variable
+
+`PATH` is a colon-separated list of directories that the shell searches when
+you type a command name. If an executable is not in one of those directories,
+the shell may report “command not found.” Use `command -v` to see which
+executable would run, and `printf` to inspect the current search path.
+
+```{bash}
+printf '%s\n' "$PATH"
+command -v bash
+command -v python
+```
+
+If you install a program in a personal `bin` directory, prepend that directory
+to `PATH` so it is searched before the other locations. This change applies to
+the current shell and programs launched from it. Do not replace `PATH` with
+only one directory, since that can make standard commands unavailable. On an
+HPC cluster, use the site-recommended module or environment setup when
+available.
+
+```{bash}
+export PATH="$HOME/bin:$PATH"
+command -v my_tool
+```
+
+# Loops
+
+## `for` loops
+
+Use a `for` loop to repeat an operation over array items, file names, or a
+sequence of values. The example below prints intended work rather than running
+a bioinformatics program. Quoting `"$sample"` is important if a value contains
+spaces or shell-special characters.
+
+```{bash}
+samples=("sample_A" "sample_B" "sample_C")
+
+for sample in "${samples[@]}"; do
+    echo "Would align ${sample}_R1.fastq.gz and ${sample}_R2.fastq.gz"
+done
+```
+
+For file lists, a glob such as `*.fastq.gz` is convenient when files are in one
+directory. If no file matches, Bash normally leaves the glob unchanged; check
+that files were found before using this pattern in a real script. Do not use
+`for file in $(find ...)`: command substitution splits file names on whitespace.
+
+```{bash}
+shopt -s nullglob
+files=(fastq/*.fastq.gz)
+
+if ((${#files[@]} == 0)); then
+    printf 'No FASTQ files found in fastq/\n' >&2
+else
+    for file in "${files[@]}"; do
+        printf 'Found: %s\n' "$file"
+    done
+fi
+```
+
+## Conditional tests with `if`
+
+Loops often need to make decisions about each item. In Bash, `[[ ... ]]`
+performs a conditional test; `if` runs its body when the test succeeds. File
+tests such as `-f` and `-d` are useful for checking expected inputs before
+processing them. Quote variable expansions even inside `[[ ... ]]` as a clear
+habit, especially when reusing the value in commands.
+
+```{bash}
+if [[ -f "bash/samples.tsv" ]]; then
+    printf 'The sample table is a regular file\n'
+fi
+
+if [[ -d "bash" ]]; then
+    printf 'The bash/ directory exists\n'
+fi
+```
+
+Common tests and operators include:
+
+| Test or operator               | Meaning                                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------------------- |
+| `-e PATH`                      | Path exists.                                                                                |
+| `-f PATH`                      | Path exists and is a regular file.                                                          |
+| `-d PATH`                      | Path exists and is a directory.                                                             |
+| `-r PATH`                      | Path is readable by the current process.                                                    |
+| `-w PATH`                      | Path is writable by the current process.                                                    |
+| `-s PATH`                      | Path is a regular file with nonzero size.                                                   |
+| `-z STRING`                    | String is empty.                                                                            |
+| `-n STRING`                    | String is not empty.                                                                        |
+| `STRING1 == STRING2`           | Strings are equal.                                                                          |
+| `STRING1 != STRING2`           | Strings are different.                                                                      |
+| `! TEST`                       | Negates a test.                                                                             |
+| `TEST1 && TEST2`               | Both tests must succeed.                                                                    |
+| `TEST1 || TEST2`               | At least one test must succeed.                                                             |
+| `(( NUMBER1 >= NUMBER2 ))`     | Numeric comparison; arithmetic operators include `==`, `!=`, `<`, `<=`, `>`, and `>=`.      |
+
+Use `[[ ... ]]` for file and string tests. Parentheses can group expressions
+when needed; use `(( ... ))` for numeric comparisons.
+
+## `[ ... ]` versus `[[ ... ]]`
+
+`[ ... ]` is the traditional test command (also written `test`) and is
+available in POSIX shells. The closing `]` is an argument to that command, so
+spaces around it and the test operators are required. Variable expansions
+inside `[ ... ]` should be quoted to prevent word splitting and filename
+expansion.
+
+`[[ ... ]]` is a Bash conditional expression, not a POSIX feature. In Bash it
+does not split variable expansions into separate words or expand them as
+filename patterns, and it supports combining tests with `&&` and `||` inside
+the expression. It also supports pattern matching on the right-hand side of
+`==`; leave that pattern unquoted when you want wildcard matching. For Bash
+scripts, `[[ ... ]]` is usually the clearer and safer choice. Use `[ ... ]`
+when writing a script that must run under POSIX shells such as `sh`.
+
+```{bash}
+value="sample 01"
+
+# Portable test command: quote the variable.
+if [ "$value" = "sample 01" ]; then
+    printf 'Exact match using [ ... ]\n'
+fi
+
+# Bash conditional: patterns on the right-hand side can match.
+if [[ "$value" == sample* ]]; then
+    printf 'Pattern match using [[ ... ]]\n'
+fi
+```
+
+For portable shell, use separate tests joined with shell-level `&&` or `||`, or
+use explicit `if`/`elif` branches.
+
+```{bash}
+input="bash/samples.tsv"
+
+if [[ -f "$input" && -r "$input" && -s "$input" ]]; then
+    printf 'Input exists, is readable, and is nonempty: %s\n' "$input"
+elif [[ ! -e "$input" ]]; then
+    printf 'Input does not exist: %s\n' "$input" >&2
+else
+    printf 'Input is not a readable, nonempty regular file: %s\n' "$input" >&2
+fi
+```
+
+A way I commonly use this is to check for directories before making them if
+needed. I put this at the top of my primary qmd file for a project to set up any
+missing directories.
+```{bash}
+for directoryName in \
+    output/figures/volcano_plots \
+    output/figures/heatmaps \
+    input/10x_flex
+do
+  if [[ ! -d "$directoryName" ]]; then
+      mkdir -p "$directoryName"
+  fi
+done
+```
+
+These tests can be used directly in a loop to skip missing inputs.
+
+```{bash}
+samples=("sample_A" "sample_B")
+count=0
+
+for sample in "${samples[@]}"; do
+    input="fastq/${sample}_R1.fastq.gz"
+    if [[ -f "$input" ]]; then
+        printf 'Found input for %s\n' "$sample"
+        ((count += 1))
+    else
+        printf 'Missing input for %s\n' "$sample" >&2
+    fi
+done
+
+if ((count > 0)); then
+    printf 'Found %s input file(s)\n' "$count"
+fi
+```
+
+## `while` loops and counters
+
+A `while` loop repeats as long as its test succeeds. It is often used for
+reading input line by line or for repeating a task until a condition changes.
+This simple counter shows the loop structure; use a scheduler rather than a
+busy loop for long-running compute tasks on a cluster.
+
+```{bash}
+count=1
+
+while ((count <= 3)); do
+    printf 'Iteration %s\n' "$count"
+    ((count += 1))
+done
+```
+
+# Finding files with `find`
+
+`find` searches a directory tree and can filter paths by properties such as
+name, type, or modification time. The starting directory comes first, followed
+by tests. Quote filename patterns so that `find`, rather than the shell,
+receives and matches the pattern.
+
+```{bash}
+find bash -type f -name '*.tsv'
+find fastq -type f -name '*R1*.fastq.gz'
+```
+
+By default, `find` searches below the starting directory recursively. Add
+`-maxdepth` to limit how far it descends. It can also perform an action on
+matches: `-exec ... {} +` safely passes groups of matched paths to a command,
+without splitting file names at spaces.
+
+```{bash}
+find bash -maxdepth 1 -type f -name '*.tsv' -exec wc -l {} +
+```
+
+For unusual file names, use NUL-delimited output (`-print0`) when connecting
+`find` to another tool. Newlines or spaces can occur in file names, so avoid
+parsing the ordinary line-oriented output of `find` into a shell word list.
+
+# Passing file lists with `xargs`
+
+`xargs` reads items from standard input and appends them as arguments to a
+command. It is often paired with `find` to apply a command to discovered
+files. Use `find -print0` with `xargs -0` so that spaces, quotes, and newlines
+in file names are handled safely. The following counts lines in each TSV file
+in the `bash/` folder.
+
+```{bash}
+find bash -maxdepth 1 -type f -name '*.tsv' -print0 |
+    xargs -0 -r wc -l
+```
+
+GNU `xargs -r` avoids running the command if there are no input paths. Use
+`-n 1` to pass one path per command invocation; `-P 2` can run up to two
+invocations concurrently. Parallel execution is only appropriate when the
+commands are independent and the available resources allow it. For many tasks,
+`find -exec ... {} +` is simpler and avoids the need for `xargs`.
+
+```{bash}
+find bash -maxdepth 1 -type f -name '*.tsv' -print0 |
+    xargs -0 -r -n 1 -P 2 wc -l
+```
+
+# Functions and arguments
+
+Functions group reusable steps under a name. Inside a function, `$1`, `$2`,
+and so on refer to the first, second, and subsequent arguments. `"$@"` is an
+array thatexpands to all arguments while keeping each argument separate. Use
+`local` for variables that should not leak into the rest of the script.
+
+```{bash}
+report_file() {
+    local file="$1"
+
+    if [[ -z "$file" ]]; then
+        printf 'Usage: report_file FILE\n' >&2
+        return 2
+    fi
+
+    printf 'File name: %s\n' "${file##*/}"
+    printf 'Directory: %s\n' "$(dirname -- "$file")"
+}
+
+report_file "results/sample 01.counts.txt"
+```
+
+A function's `return` value is an exit status from 0 to 255, not a general
+place to return text or large numbers. To report text, print it and capture it
+with command substitution; to return success or failure, use `return`.
+`"$@"` is particularly useful for writing wrapper functions that pass along
+their own arguments.
+
+```{bash}
+log_command() {
+    printf 'Running:'
+    printf ' %q' "$@"
+    printf '\n'
+
+    "$@"
+}
+
+# Example invocation:
+log_command printf '%s\n' "This command has several arguments"
+```
+
+# Temporary files and cleanup with `mktemp` and `trap`
+
+Temporary files are useful for intermediate results that should not be kept
+with the final outputs. `mktemp -d` creates a uniquely named temporary
+directory and prints its path. Saving that path in a variable lets the script
+use the directory without guessing a name or accidentally reusing another
+process's temporary files.
+
+`trap` tells the shell to run a command when an event occurs. Common trap
+conditions include:
+
+| Condition          | Trigger |
+| ------------------ | ---- |
+| `EXIT`             | The shell is exiting, whether normally or after a handler calls `exit`. Often used for cleanup. |
+| `INT`              | The process receives an interrupt signal, usually when the user presses Ctrl-C. |
+| `TERM`             | The process receives a termination request, commonly from a scheduler or a `kill` command. |
+| `HUP`              | The process receives a hangup signal, often when its terminal or connection closes. |
+| `ERR`              | A command fails in many contexts; exact behavior depends on shell options and context. Not a substitute for checking statuses explicitly. |
+| `KILL` (`SIGKILL`) | Cannot be caught or handled, so a trap cannot run when the process is forcibly killed this way. |
+
+In this example, Ctrl-C and `TERM` cause the script to exit with conventional
+status codes; the `EXIT` handler then removes the temporary directory. Keep
+the path in the variable set by `mktemp`; do not point cleanup at a broad or
+user-supplied directory.
+
+```{bash}
+tmpdir=$(mktemp -d) || exit 1
+trap 'rm -rf -- "$tmpdir"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+printf 'Intermediate results go in: %s\n' "$tmpdir"
+```
+
+Files created inside `"$tmpdir"` are removed by the trap as well. If you need
+to inspect intermediate data after a run, copy it to a permanent output
+location before the script exits. `mktemp` options vary across operating
+systems; these examples target Linux systems.
+
+# A first look at `awk`
+
+`awk` is useful for inspecting and transforming line-oriented text, especially
+tabular files. It reads input one line at a time, splits each line into fields,
+and lets you print selected fields or rows that match a condition. By default,
+fields are separated by whitespace: `$1` is the first field, `$2` the second,
+and `$0` the entire line. Use `-F` to set a different input field separator,
+such as a tab for a TSV file.
+
+This example uses the companion `counts.tsv` file and prints the first and
+third columns for rows where the third column
+is at least 10. `NR` is the current line number across all input; `NR == 1`
+selects the header. Setting `OFS` makes the output columns tab-delimited too.
+Adjust the column numbers and condition to match your file.
+
+```{bash}
+awk -F '\t' '
+    BEGIN { OFS = "\t" }
+    NR == 1 { print; next }
+    $3 >= 10 { print $1, $3 }
+' bash/counts.tsv
+```
+
+An `awk` program has the general form `condition { action }`. If the condition
+is omitted, the action is run for every line; if the action is omitted, a
+matching line is printed. The companion `samples.tsv` file in this folder
+contains tab-separated sample names, conditions, and statuses. Here, `-F '\t'`
+treats tabs as separators, and `$NF` refers to the last field on the current
+line. These commands assume you run them from the repository root.
+
+```{bash}
+awk -F '\t' 'NR == 1 { print; next } $NF == "passed" { print }' bash/samples.tsv
+```
+
+CSV files can contain quoted fields with embedded commas, which simple field
+splitting does not parse correctly. For complex CSV files, use a CSV-aware tool
+or programming language rather than assuming commas always separate fields.
+
+# A first look at `sed`
+
+`sed` is a stream editor: it reads text and applies small editing instructions
+to each line. A common use is substitution, written
+`s/pattern/replacement/`. By default, the first match on each line is changed;
+adding `g` changes every match on that line. These commands print transformed
+text to standard output and leave the input file unchanged.
+
+```{bash}
+sed 's/old-name/new-name/g' bash/samples.tsv
+sed -n '1,5p' bash/samples.tsv
+```
+
+In the second command, `-n` disables automatic printing and `1,5p` explicitly
+prints lines 1 through 5. This is helpful for previewing a file or a change.
+Use a different delimiter when the text contains many slashes; for example,
+`|` can make paths easier to read.
+
+```{bash}
+sed 's|old-name|new-name|g' bash/samples.tsv
+```
+
+To save transformed output, write it to a different file and inspect the
+result before replacing the original. Do not redirect output back to the same
+file being read: the shell truncates that file before `sed` can process it.
+
+```{bash}
+sed 's/old-name/new-name/g' bash/samples.tsv > bash/samples.updated.tsv
+diff -u bash/samples.tsv bash/samples.updated.tsv
+```
+
+In-place editing changes the file itself and can be harder to undo. GNU `sed`
+supports making a backup with `-i.bak`; check your operating system's `sed`
+documentation because the in-place option differs between GNU and BSD/macOS
+versions. Make a copy or use the separate-output approach above when learning.
+
+```{bash}
+# GNU sed: edits the generated output and keeps a backup beside it
+sed -i.bak 's/new-name/final-name/g' bash/samples.updated.tsv
+```
+
+# Running work in parallel
+
+GNU `parallel` runs multiple jobs concurrently. It is useful when many
+independent files need the same command. Install/use it according to your
+system's guidance; clusters often provide it as a software module. Confirm
+available CPUs and the cluster's policies before choosing the job count.
+
+`pigz` is a parallel implementation of gzip. One way to use GNU `parallel` is
+to run one single-threaded `pigz` process per input file, with GNU `parallel`
+limiting the number of concurrent processes. Here `-k` keeps each original
+uncompressed file; without it, `pigz` normally replaces the input with its
+compressed version. Try this on disposable copies first.
+
+```{bash}
+find fastq -maxdepth 1 -type f -name '*.fastq' -print0 |
+    parallel --null --jobs 4 pigz -p 1 -k
+```
+
+The `--jobs 4` setting allows up to four files to be compressed at once, while
+`pigz -p 1` uses one compression thread for each file. This avoids accidentally
+asking for four jobs with many threads each. If the input files already end in
+`.gz`, they are already gzip-compressed and should not be passed to this
+compression command.
+
+Always consider how many CPU cores and how much memory the job uses in total.
+On a shared HPC system, submit substantial work through the scheduler and
+request the resources your command will use rather than launching an
+unrestricted set of processes on a login node.
+
+# Keeping terminal work alive: `screen` and `tmux`
+
+`screen` and `tmux` are terminal multiplexers: they keep a terminal session
+available when you disconnect from SSH and let you reconnect later. They are
+useful for interactive work, but they are not substitutes for Slurm when
+running scheduled analysis. This is a minimal `screen` workflow:
+
+```{bash}
+screen -S my-session        # start a named session
+screen -ls                  # list sessions
+screen -r my-session        # reconnect
+```
+
+To detach from a running `screen` session without stopping its programs, press
+`Ctrl-a`, then `d`. On a shared system, reconnect only to your own session and
+remember that a disconnected interactive process may still consume resources.
+
+`tmux` provides similar functionality with different key bindings and
+configuration. It is widely used, but this lesson does not assume familiarity
+with it. If you choose to use it, start with its local help or a short
+introductory guide and practice in a disposable session before relying on it
+for important work.
+
+# File permissions with `chmod`
+
+Permissions control who can read, write, or execute a file. The symbolic
+notation below adds execute permission for the file owner; this is commonly
+needed before running a script as `./script.sh`. You can also run a script as
+`bash script.sh` without changing its executable bit.
+
+```{bash}
+chmod u+x script.sh
+./script.sh
+```
+
+The numeric notation uses three digits for owner, group, and others. In each
+digit, read is `4`, write is `2`, and execute is `1`; add the values to combine
+permissions. For example, `750` means owner can read/write/execute, group can
+read/execute, and others have no access. Check the existing mode with `ls -l`
+before changing it. Avoid `chmod 777`: it gives everyone write permission.
+
+```{bash}
+chmod 750 script.sh
+ls -l script.sh
+```
+
+Permission changes can affect collaborators and shared data. In particular,
+do not recursively change permissions on a project or data directory unless
+you understand the consequences and have authorization.
+
+# Brief introduction to Slurm array jobs
+
+Slurm is a workload manager used by many HPC clusters. An array job submits
+many similar tasks, each identified by a task ID, instead of starting a large
+batch of processes on a login node. The following is a template, not a
+ready-to-submit job: adapt partition, account, resources, paths, and site
+requirements to your cluster.
+
+```{bash}
+#!/usr/bin/env bash
+#SBATCH --job-name=align
+#SBATCH --array=1-3
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=8G
+#SBATCH --time=01:00:00
+#SBATCH --output=logs/align_%A_%a.out
+
+samples=("sample_A" "sample_B" "sample_C")
+sample="${samples[$((SLURM_ARRAY_TASK_ID - 1))]}"
+
+printf 'Task %s is processing %s\n' "$SLURM_ARRAY_TASK_ID" "$sample"
+# Run the real analysis command here, using the requested resources.
+```
+
+The array range above is `1-3`, so the example subtracts one to map Slurm's
+task IDs to Bash's zero-based array indices. Create the `logs/` directory
+before submission if the cluster expects the output directory to exist.
+Consult your cluster's documentation for submission, limits, and best
+practices.
+
+# Monitoring resource use
+
+`top` displays changing process and system resource information. Press `q` to
+quit. `htop` is a more visual alternative if it is installed. These tools help
+you see whether a process is using CPU or memory; they do not replace scheduler
+accounting or guarantee that a process is healthy.
+
+```{bash}
+top
+htop
+```
+
+To check which process is yours, look at the user and command columns. On an
+HPC cluster, monitor work from the appropriate compute node and use the
+cluster's scheduler commands for queued and completed job status.
+
+# Finding large directories with `du`
+
+`du` estimates disk usage. From a directory, `du -h --max-depth=1` reports
+human-readable sizes for that directory and its immediate subdirectories.
+Sorting the results can make the largest entries easier to spot. Disk usage
+can take time to calculate on large network filesystems, so avoid running
+repeated broad scans on shared storage.
+
+```{bash}
+du -h --max-depth=1 .
+du -h --max-depth=1 . | sort -h
+```
+
+The final `.` means “start here.” Replace it with a project directory you have
+permission to inspect. The command reports disk usage, not necessarily the
+apparent size of files; hard links, sparse files, and filesystem behavior can
+make those numbers differ.
+
+# Creating and inspecting archives with `tar`
+
+`tar` bundles files and directories into an archive. The `-c` flag creates an
+archive, `-f` names the archive, and `-v` prints files as they are added. Use
+paths relative to the project directory when you want the archive to unpack
+without an absolute directory structure.
+
+```{bash}
+tar -cvf project-files.tar results/ scripts/ README.md
+```
+
+Add gzip compression with `-z` to create a `.tar.gz` archive. FASTQ, BAM, and
+other formats that are already compressed may not shrink much further. Check
+what an archive contains with `-t` before extracting it.
+
+```{bash}
+tar -czvf project-files.tar.gz results/ scripts/ README.md
+tar -tzf project-files.tar.gz
+```
+
+Extract an archive with `-x`. By default, extraction writes into the current
+directory, so first inspect the contents and choose an appropriate destination.
+Only extract archives from sources you trust; archives can contain paths that
+overwrite files if handled carelessly.
+
+```{bash}
+mkdir -p restored-project
+tar -xzf project-files.tar.gz -C restored-project
+```
+
+# Checking file checksums with `md5sum`
+
+A checksum is a short value calculated from a file's contents. `md5sum` is
+commonly used to check whether a file was transferred or copied without
+accidental changes. Create a checksum file alongside a data file, then use
+`--check` later to compare the current contents with the recorded checksum.
+
+```{bash}
+md5sum bash/samples.tsv > samples.tsv.md5
+md5sum --check samples.tsv.md5
+```
+
+Run the check from the same directory used when creating the checksum file, or
+store a path in the checksum file that will be valid from the checking
+directory. MD5 is suitable for detecting accidental corruption in many
+workflows, but it is not collision-resistant enough for security-sensitive
+verification; use a modern hash such as SHA-256 when authenticity or
+adversarial tampering matters.
+
+# Good habits for reliable scripts
+
+- Quote variable expansions unless you specifically need word splitting or
+  wildcard expansion.
+- Use arrays for lists of values, and expand them as `"${array[@]}"`.
+- Test scripts with a small, disposable set of inputs before using real data.
+- Make paths and resource settings explicit, especially in scheduled jobs.
+- Check exit statuses and read tool output; a script finishing does not by
+  itself mean that the analysis produced correct results.
