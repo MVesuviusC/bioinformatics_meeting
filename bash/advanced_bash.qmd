@@ -370,7 +370,6 @@ done
 ```
 
 These tests can be used directly in a loop to skip missing inputs.
-
 ```{bash}
 samples=("sample_A" "sample_B")
 count=0
@@ -481,8 +480,8 @@ report_file "results/sample 01.counts.txt"
 A function's `return` value is an exit status from 0 to 255, not a general
 place to return text or large numbers. To report text, print it and capture it
 with command substitution; to return success or failure, use `return`.
-`"$@"` is particularly useful for writing wrapper functions that pass along
-their own arguments.
+`"$@"` is an array of all arguments and is particularly useful for writing
+wrapper functions that pass along their own arguments.
 
 ```{bash}
 log_command() {
@@ -496,6 +495,12 @@ log_command() {
 # Example invocation:
 log_command printf '%s\n' "This command has several arguments"
 ```
+
+You may need to export the function if you want to use it in parallel or in a subshell.
+```{bash}
+export -f log_command
+```
+
 
 # Temporary files and cleanup with `mktemp` and `trap`
 
@@ -554,7 +559,7 @@ Adjust the column numbers and condition to match your file.
 ```{bash}
 awk -F '\t' '
     BEGIN { OFS = "\t" }
-    NR == 1 { print; next }
+    NR == 1 { print $1, $3; next }
     $3 >= 10 { print $1, $3 }
 ' bash/counts.tsv
 ```
@@ -655,6 +660,7 @@ running scheduled analysis. This is a minimal `screen` workflow:
 screen -S my-session        # start a named session
 screen -ls                  # list sessions
 screen -r my-session        # reconnect
+screen -r                   # reconnect to the session if only one exists
 ```
 
 To detach from a running `screen` session without stopping its programs, press
@@ -705,24 +711,23 @@ requirements to your cluster.
 ```{bash}
 #!/usr/bin/env bash
 #SBATCH --job-name=align
-#SBATCH --array=1-3
+#SBATCH --array=0-2
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=8G
 #SBATCH --time=01:00:00
 #SBATCH --output=logs/align_%A_%a.out
 
 samples=("sample_A" "sample_B" "sample_C")
-sample="${samples[$((SLURM_ARRAY_TASK_ID - 1))]}"
+sample="${samples[$SLURM_ARRAY_TASK_ID]}"
 
 printf 'Task %s is processing %s\n' "$SLURM_ARRAY_TASK_ID" "$sample"
 # Run the real analysis command here, using the requested resources.
 ```
 
-The array range above is `1-3`, so the example subtracts one to map Slurm's
-task IDs to Bash's zero-based array indices. Create the `logs/` directory
-before submission if the cluster expects the output directory to exist.
-Consult your cluster's documentation for submission, limits, and best
-practices.
+The array range above is `0-2`, so the example uses zero-based indices. Create
+the `logs/` directory before submission if the cluster expects the output
+directory to exist. Consult your cluster's documentation for submission, limits,
+and best practices.
 
 # Monitoring resource use
 
@@ -766,7 +771,7 @@ paths relative to the project directory when you want the archive to unpack
 without an absolute directory structure.
 
 ```{bash}
-tar -cvf project-files.tar results/ scripts/ README.md
+tar cvf project-files.tar results/ scripts/ README.md
 ```
 
 Add gzip compression with `-z` to create a `.tar.gz` archive. FASTQ, BAM, and
@@ -774,8 +779,8 @@ other formats that are already compressed may not shrink much further. Check
 what an archive contains with `-t` before extracting it.
 
 ```{bash}
-tar -czvf project-files.tar.gz results/ scripts/ README.md
-tar -tzf project-files.tar.gz
+tar czvf project-files.tar.gz results/ scripts/ README.md
+tar tzf project-files.tar.gz
 ```
 
 Extract an archive with `-x`. By default, extraction writes into the current
@@ -785,7 +790,7 @@ overwrite files if handled carelessly.
 
 ```{bash}
 mkdir -p restored-project
-tar -xzf project-files.tar.gz -C restored-project
+tar xzf project-files.tar.gz -C restored-project
 ```
 
 # Checking file checksums with `md5sum`
